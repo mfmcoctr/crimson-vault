@@ -241,13 +241,15 @@ test('RSS news parser and product metadata extractor handle Austrian feeds and J
     <title><![CDATA[Neue Brücke in Hallein eröffnet - Salzburger Nachrichten]]></title>
     <link>https://example.at/hallein-bruecke</link>
     <pubDate>${new Date().toUTCString()}</pubDate>
-    <description>Wichtige Verkehrsnews für den Tennengau.</description>
+    <description>&lt;a href="https://news.google.com/rss/articles/CBMi123"&gt;Neue Brücke in Hallein eröffnet&lt;/a&gt;&amp;nbsp;&lt;font color="#6f6f6f"&gt;Salzburger Nachrichten&lt;/font&gt;</description>
   </item></channel></rss>`;
 
   const items = parseRssItems(sampleRss, 'Google News');
   assert.equal(items.length, 1);
   assert.equal(items[0].title, 'Neue Brücke in Hallein eröffnet');
   assert.equal(items[0].source, 'Salzburger Nachrichten');
+  assert.equal(items[0].summary.includes('<a'), false);
+  assert.equal(items[0].summary.includes('href='), false);
 
   assert.equal(detectStoreFromUrl('https://www.amazon.de/dp/B09XS7JWHH'), 'Amazon');
   assert.equal(detectStoreFromUrl('https://www.temu.com/goods.html'), 'Temu');

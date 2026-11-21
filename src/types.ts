@@ -205,7 +205,7 @@ export interface MarketsSnapshot {
     date: string;
   } | null;
   fuel: {
-    city: 'hallein' | 'salzburg';
+    city: string;
     cityLabel: string;
     super95: {
       cheapest: number | null;
@@ -221,6 +221,8 @@ export interface MarketsSnapshot {
   warnings: string[];
 }
 
+export type NewsCountryCode = 'AT' | 'TR' | 'DE' | 'CH' | 'GB' | 'US';
+
 export interface LocalNewsItem {
   id: string;
   title: string;
@@ -228,12 +230,17 @@ export interface LocalNewsItem {
   source: string;
   publishedAt: string;
   ageHours: number;
-  region: 'Hallein' | 'Salzburg';
+  region: string;
+  isPrimaryRegion: boolean;
   summary: string;
 }
 
 export interface LocalNewsSnapshot {
   updatedAt: string;
+  country: NewsCountryCode;
+  language: string;
+  regionPrimary: string;
+  regionSecondary: string;
   items: LocalNewsItem[];
   last24hCount: number;
 }
@@ -246,7 +253,10 @@ export interface AppSettings {
   exchangeRates: Record<CurrencyCode, number>;
   cryptoWatchlist: string[];
   marketCurrency: 'EUR' | 'USD' | 'TRY';
-  fuelCity: 'hallein' | 'salzburg';
+  fuelCity: string;
+  newsCountry: NewsCountryCode;
+  newsRegionPrimary: string;
+  newsRegionSecondary: string;
   backgroundMode: BackgroundMode;
   backgroundFolderPath: string;
   slideshowIntervalSeconds: number;
@@ -359,6 +369,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
   cryptoWatchlist: ['bitcoin', 'ethereum', 'solana', 'binancecoin', 'ripple'],
   marketCurrency: 'EUR',
   fuelCity: 'hallein',
+  newsCountry: 'AT',
+  newsRegionPrimary: 'Hallein',
+  newsRegionSecondary: 'Salzburg',
   backgroundMode: 'default',
   backgroundFolderPath: '',
   slideshowIntervalSeconds: 30,

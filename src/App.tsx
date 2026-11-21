@@ -283,7 +283,9 @@ const VaultAppInner: React.FC = () => {
             <MarketsPage settings={settings} onUpdateSettings={handleUpdateSettings} />
           )}
 
-          {activePage === 'news' && <NewsPage />}
+          {activePage === 'news' && (
+            <NewsPage settings={settings} onUpdateSettings={handleUpdateSettings} />
+          )}
 
           {activePage === 'deals' && (
             <DealsPage deals={deals} onRefresh={async () => setDeals(await api.getDeals())} />

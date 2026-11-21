@@ -259,7 +259,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             <div className="flex items-center justify-between text-[11px] text-[#D7C7CC] pt-1 border-t border-white/8">
               <span className="inline-flex items-center gap-1">
                 <Fuel className="w-3 h-3 text-emerald-400" />
-                {markets.fuel.city === 'hallein' ? 'Hallein' : 'Salzburg'} Super 95:{' '}
+                {markets.fuel.cityLabel.split(' ')[0]} Super 95:{' '}
                 <strong className="font-mono-code text-emerald-300">
                   {markets.fuel.super95.cheapest ? `€${markets.fuel.super95.cheapest.toFixed(3)}` : '—'}
                 </strong>
@@ -281,7 +281,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           <div className="flex items-center justify-between text-xs">
             <span className="text-rose-200 font-semibold flex items-center gap-1.5">
               <Newspaper className="w-3.5 h-3.5 text-rose-400" />
-              Hallein & Salzburg Top 10
+              {[settings.newsRegionPrimary, settings.newsRegionSecondary].filter(Boolean).join(' & ') || 'Bölge'} Top 10
             </span>
             <span className="text-[#9C868E]">Tümü →</span>
           </div>

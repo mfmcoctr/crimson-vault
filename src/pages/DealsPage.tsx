@@ -686,3 +686,4 @@ export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
     </div>
   );
 };
+

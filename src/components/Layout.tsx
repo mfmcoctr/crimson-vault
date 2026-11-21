@@ -114,7 +114,7 @@ export const Layout: React.FC<LayoutProps> = ({
       },
       {
         id: 'news',
-        label: 'Hallein / Salzburg Haber',
+        label: 'Bölge Haberleri',
         icon: <Newspaper className="w-4 h-4" />,
       },
       {

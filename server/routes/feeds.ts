@@ -14,6 +14,7 @@ import type {
   LocalNewsItem,
   LocalNewsSnapshot,
   MarketsSnapshot,
+  NewsCountryCode,
   StoreName,
   TrackedProduct,
 } from '../../src/types.ts';
@@ -41,14 +42,79 @@ const COIN_CATALOG: Record<string, { symbol: string; name: string; binancePair?:
   pepe: { symbol: 'PEPE', name: 'Pepe', binancePair: 'PEPEUSDT' },
 };
 
-const FUEL_LOCATIONS = {
+const FUEL_LOCATIONS: Record<string, { label: string; lat: number; lon: number }> = {
   hallein: { label: 'Hallein (5400)', lat: 47.6833, lon: 13.1 },
   salzburg: { label: 'Salzburg (5020)', lat: 47.8095, lon: 13.055 },
-} as const;
+  wien: { label: 'Wien (1010)', lat: 48.2082, lon: 16.3738 },
+  graz: { label: 'Graz (8010)', lat: 47.0707, lon: 15.4395 },
+  linz: { label: 'Linz (4020)', lat: 48.3069, lon: 14.2858 },
+  innsbruck: { label: 'Innsbruck (6020)', lat: 47.2692, lon: 11.4041 },
+};
+
+const COUNTRY_NEWS_CONFIG: Record<
+  NewsCountryCode,
+  { hl: string; gl: string; ceid: string; lang: string; trustedRe: RegExp }
+> = {
+  AT: {
+    hl: 'de-AT',
+    gl: 'AT',
+    ceid: 'AT:de',
+    lang: 'de',
+    trustedRe: /(orf|salzburger nachrichten|meinbezirk|salzburg24|krone|derstandard|kurier|die presse|kleine zeitung|tiroler)/i,
+  },
+  TR: {
+    hl: 'tr',
+    gl: 'TR',
+    ceid: 'TR:tr',
+    lang: 'tr',
+    trustedRe: /(aa|anadolu|ntv|bbc|dw|t24|diken|hürriyet|milliyet|sözcü|habertürk|cnntürk|cumhuriyet|trthaber|ekonomim)/i,
+  },
+  DE: {
+    hl: 'de',
+    gl: 'DE',
+    ceid: 'DE:de',
+    lang: 'de',
+    trustedRe: /(tagesschau|spiegel|zeit|sueddeutsche|faz|welt|ndr|wdr|br24|swr|rbb|mdr|focus)/i,
+  },
+  CH: {
+    hl: 'de-CH',
+    gl: 'CH',
+    ceid: 'CH:de',
+    lang: 'de',
+    trustedRe: /(srf|nzz|tages-anzeiger|blick|20 minuten|watson|aargauer)/i,
+  },
+  GB: {
+    hl: 'en-GB',
+    gl: 'GB',
+    ceid: 'GB:en',
+    lang: 'en',
+    trustedRe: /(bbc|guardian|reuters|sky news|telegraph|independent|ft|times)/i,
+  },
+  US: {
+    hl: 'en-US',
+    gl: 'US',
+    ceid: 'US:en',
+    lang: 'en',
+    trustedRe: /(reuters|ap news|nytimes|washington post|cnn|npr|bloomberg|nbc|cbs|abc)/i,
+  },
+};
+
+const AUSTRIA_ORF_FEEDS: { match: RegExp; url: string; source: string }[] = [
+  { match: /(salzburg|hallein|tennengau|pinzgau|pongau|flachgau|lungau)/i, url: 'https://rss.orf.at/salzburg.xml', source: 'ORF Salzburg' },
+  { match: /(wien|vienna)/i, url: 'https://rss.orf.at/wien.xml', source: 'ORF Wien' },
+  { match: /(graz|steiermark)/i, url: 'https://rss.orf.at/steiermark.xml', source: 'ORF Steiermark' },
+  { match: /(linz|wels|steyr|oberösterreich)/i, url: 'https://rss.orf.at/ooe.xml', source: 'ORF Oberösterreich' },
+  { match: /(innsbruck|tirol|kufstein)/i, url: 'https://rss.orf.at/tirol.xml', source: 'ORF Tirol' },
+  { match: /(klagenfurt|villach|kärnten)/i, url: 'https://rss.orf.at/kaernten.xml', source: 'ORF Kärnten' },
+  { match: /(bregenz|dornbirn|vorarlberg)/i, url: 'https://rss.orf.at/vorarlberg.xml', source: 'ORF Vorarlberg' },
+  { match: /(st\.?\s*pölten|niederösterreich)/i, url: 'https://rss.orf.at/noe.xml', source: 'ORF Niederösterreich' },
+  { match: /(eisenstadt|burgenland)/i, url: 'https://rss.orf.at/burgenland.xml', source: 'ORF Burgenland' },
+];
 
 // Simple in-memory caches
 const marketsCache = new Map<string, { at: number; data: MarketsSnapshot }>();
-const newsCache = { at: 0, data: null as LocalNewsSnapshot | null };
+const newsCache = new Map<string, { at: number; data: LocalNewsSnapshot }>();
+const geocodeCache = new Map<string, { label: string; lat: number; lon: number }>();
 
 async function fetchJsonWithTimeout<T>(url: string, timeoutMs = 8000): Promise<T> {
   const res = await fetch(url, {
@@ -230,13 +296,41 @@ async function fetchFuelForType(
   return { cheapest, average, stations: top5 };
 }
 
-// --- 1. MARKETS + GOLD + FUEL (HALLEIN / SALZBURG) ---
+async function resolveAustriaFuelLocation(rawCity: string): Promise<{ key: string; label: string; lat: number; lon: number }> {
+  const key = (rawCity || 'hallein').trim().toLowerCase();
+  if (FUEL_LOCATIONS[key]) {
+    return { key, ...FUEL_LOCATIONS[key] };
+  }
+  const cached = geocodeCache.get(key);
+  if (cached) return { key, ...cached };
+  try {
+    const geo = await fetchJsonWithTimeout<{ lat: string; lon: string; display_name: string }[]>(
+      `https://nominatim.openstreetmap.org/search?format=json&countrycodes=at&limit=1&q=${encodeURIComponent(rawCity.trim())}`,
+      5000,
+    );
+    if (geo?.[0]) {
+      const entry = {
+        label: rawCity.trim(),
+        lat: Number(geo[0].lat),
+        lon: Number(geo[0].lon),
+      };
+      geocodeCache.set(key, entry);
+      return { key, ...entry };
+    }
+  } catch {
+    // fallback to Hallein
+  }
+  return { key: 'hallein', ...FUEL_LOCATIONS.hallein };
+}
+
+// --- 1. MARKETS + GOLD + FUEL (AUSTRIA E-CONTROL DYNAMIC CITY) ---
 router.get('/markets', async (req, res) => {
   const settings = getSettings(getActiveDek());
-  const cityParam = req.query.city === 'salzburg' ? 'salzburg' : req.query.city === 'hallein' ? 'hallein' : settings.fuelCity || 'hallein';
+  const cityRaw = typeof req.query.city === 'string' && req.query.city.trim() ? req.query.city.trim() : settings.fuelCity || 'hallein';
   const forceRefresh = req.query.refresh === '1';
   const watchlist = settings.cryptoWatchlist?.length ? settings.cryptoWatchlist : ['bitcoin', 'ethereum', 'solana'];
-  const cacheKey = `${cityParam}:${watchlist.join(',')}`;
+  const loc = await resolveAustriaFuelLocation(cityRaw);
+  const cacheKey = `${loc.key}:${watchlist.join(',')}`;
 
   const cached = marketsCache.get(cacheKey);
   if (!forceRefresh && cached && Date.now() - cached.at < 2 * 60 * 1000) {
@@ -251,8 +345,6 @@ router.get('/markets', async (req, res) => {
   } catch {
     warnings.push('Döviz kurları (ECB) geçici olarak alınamadı.');
   }
-
-  const loc = FUEL_LOCATIONS[cityParam];
 
   const [cryptoRes, metalsRes, supRes, dieRes] = await Promise.allSettled([
     fetchCryptoQuotes(watchlist, fx),
@@ -285,7 +377,7 @@ router.get('/markets', async (req, res) => {
     metals,
     fx,
     fuel: {
-      city: cityParam,
+      city: loc.key,
       cityLabel: loc.label,
       super95,
       diesel,
@@ -297,18 +389,23 @@ router.get('/markets', async (req, res) => {
   res.json(snapshot);
 });
 
-// --- 2. HALLEIN & SALZBURG TOP 10 NEWS (LAST 24H) ---
+// --- 2. DYNAMIC REGIONAL TOP 10 NEWS (LAST 24H) ---
 function decodeXmlEntities(str: string): string {
-  return str
+  // 1) Unwrap CDATA and decode HTML entities FIRST so escaped tags like &lt;a href=...&gt; are decoded before tag stripping
+  const decoded = str
     .replace(/<!\[CDATA\[([\s\S]*?)\]\]>/g, '$1')
-    .replace(/<[^>]+>/g, ' ')
     .replace(/&amp;/g, '&')
     .replace(/&lt;/g, '<')
     .replace(/&gt;/g, '>')
     .replace(/&quot;/g, '"')
     .replace(/&#39;|&apos;/g, "'")
     .replace(/&nbsp;/g, ' ')
-    .replace(/&#(\d+);/g, (_m, n) => String.fromCharCode(Number(n)))
+    .replace(/&#(\d+);/g, (_m, n) => String.fromCharCode(Number(n)));
+
+  // 2) Strip ALL HTML tags (including decoded anchor/font tags from Google News RSS descriptions)
+  return decoded
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/&amp;/g, '&')
     .replace(/\s+/g, ' ')
     .trim();
 }
@@ -347,69 +444,121 @@ export function parseRssItems(xml: string, fallbackSource: string): {
     const pubDateMs = pubDateStr ? Date.parse(pubDateStr) : Date.now();
     if (!title || !link || Number.isNaN(pubDateMs)) continue;
 
-    // Avoid redundant summary identical to title
-    const cleanSummary = description && !description.startsWith(title.slice(0, 25)) ? description.slice(0, 220) : '';
+    // Strip redundant summary (Google News description is usually just title + source repeated)
+    const cleanTitleStart = title.toLowerCase().slice(0, 28);
+    const descLower = description.toLowerCase();
+    const isRedundant =
+      !description ||
+      descLower.startsWith(cleanTitleStart) ||
+      description.length < 25 ||
+      /^https?:\/\//i.test(description);
+    const cleanSummary = isRedundant ? '' : description.slice(0, 220);
+
     items.push({ title, link, source, pubDateMs, summary: cleanSummary });
   }
   return items;
 }
 
 router.get('/news', async (req, res) => {
+  const settings = getSettings(getActiveDek());
   const forceRefresh = req.query.refresh === '1';
-  if (!forceRefresh && newsCache.data && Date.now() - newsCache.at < 10 * 60 * 1000) {
-    res.json(newsCache.data);
+
+  const rawCountry = String(req.query.country || settings.newsCountry || 'AT').toUpperCase();
+  const country: NewsCountryCode = (
+    ['AT', 'TR', 'DE', 'CH', 'GB', 'US'].includes(rawCountry) ? rawCountry : 'AT'
+  ) as NewsCountryCode;
+  const regionPrimary = String(
+    req.query.primary !== undefined ? req.query.primary : settings.newsRegionPrimary ?? 'Hallein',
+  ).trim();
+  const regionSecondary = String(
+    req.query.secondary !== undefined ? req.query.secondary : settings.newsRegionSecondary ?? 'Salzburg',
+  ).trim();
+
+  const effectivePrimary = regionPrimary || regionSecondary || (country === 'TR' ? 'İstanbul' : country === 'AT' ? 'Wien' : 'Berlin');
+  const effectiveSecondary = regionPrimary && regionSecondary && regionPrimary.toLowerCase() !== regionSecondary.toLowerCase()
+    ? regionSecondary
+    : '';
+
+  const cacheKey = `${country}|${effectivePrimary.toLowerCase()}|${effectiveSecondary.toLowerCase()}`;
+  const cached = newsCache.get(cacheKey);
+  if (!forceRefresh && cached && Date.now() - cached.at < 10 * 60 * 1000) {
+    res.json(cached.data);
     return;
   }
 
-  const feeds = [
-    { name: 'ORF Salzburg', url: 'https://rss.orf.at/salzburg.xml', weight: 3 },
+  const cfg = COUNTRY_NEWS_CONFIG[country];
+  const gnewsUrl = (query: string) =>
+    `https://news.google.com/rss/search?q=${encodeURIComponent(`${query} when:1d`)}&hl=${cfg.hl}&gl=${cfg.gl}&ceid=${cfg.ceid}`;
+
+  const feeds: { name: string; url: string; weight: number; tagRegion: string; isPrimaryFeed: boolean }[] = [
     {
       name: 'Google News',
-      url: 'https://news.google.com/rss/search?q=Hallein+OR+Tennengau+when:1d&hl=de-AT&gl=AT&ceid=AT:de',
-      weight: 3,
-    },
-    {
-      name: 'Google News',
-      url: 'https://news.google.com/rss/search?q=Salzburg+when:1d&hl=de-AT&gl=AT&ceid=AT:de',
-      weight: 2,
+      url: gnewsUrl(effectivePrimary),
+      weight: 3.4,
+      tagRegion: effectivePrimary,
+      isPrimaryFeed: true,
     },
   ];
+
+  if (effectiveSecondary) {
+    feeds.push({
+      name: 'Google News',
+      url: gnewsUrl(effectiveSecondary),
+      weight: 2.3,
+      tagRegion: effectiveSecondary,
+      isPrimaryFeed: false,
+    });
+  }
+
+  // Enrich with official Austrian ORF federal state RSS feed when user picks an Austrian region
+  if (country === 'AT') {
+    const combined = `${effectivePrimary} ${effectiveSecondary}`;
+    const orf = AUSTRIA_ORF_FEEDS.find((o) => o.match.test(combined));
+    if (orf) {
+      feeds.push({
+        name: orf.source,
+        url: orf.url,
+        weight: 2.8,
+        tagRegion: effectiveSecondary || effectivePrimary,
+        isPrimaryFeed: !effectiveSecondary,
+      });
+    }
+  }
 
   const results = await Promise.allSettled(
     feeds.map(async (f) => {
       const { text } = await fetchTextWithTimeout(f.url, 8000);
-      return { weight: f.weight, items: parseRssItems(text, f.name) };
+      return { meta: f, items: parseRssItems(text, f.name) };
     }),
   );
 
   const now = Date.now();
   const seen = new Set<string>();
+  const primaryRe = new RegExp(effectivePrimary.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'), 'i');
   const scored: (LocalNewsItem & { score: number })[] = [];
 
   for (const r of results) {
     if (r.status !== 'fulfilled') continue;
     for (const item of r.value.items) {
       const ageHours = Math.max(0, (now - item.pubDateMs) / (1000 * 60 * 60));
-      if (ageHours > 48) continue; // drop stale items
+      if (ageHours > 72) continue;
       const normKey = item.title
         .toLowerCase()
-        .replace(/[^a-z0-9äöüß]+/g, '')
+        .replace(/[^a-z0-9äöüßçğıöşü]+/g, '')
         .slice(0, 48);
       if (!normKey || seen.has(normKey)) continue;
       seen.add(normKey);
 
-      const isHallein = /(hallein|tennengau|kuchl|golling|puch|oberalm|adnet|bad dürrnberg|abtenau)/i.test(
-        `${item.title} ${item.summary}`,
-      );
-      const isTrusted = /(orf|salzburger nachrichten|meinbezirk|salzburg24|krone|derstandard|kurier)/i.test(
-        item.source,
-      );
+      const mentionsPrimary = primaryRe.test(`${item.title} ${item.summary}`);
+      const isPrimaryRegion = mentionsPrimary || r.value.meta.isPrimaryFeed;
+      const isTrusted = cfg.trustedRe.test(item.source);
 
-      // Importance ranking: last 24h boosted + Hallein/ORF/SN boosted + fresher boosted
-      let score = r.value.weight * 10;
+      let score = r.value.meta.weight * 10;
       if (ageHours <= 24) score += 25;
-      if (isHallein) score += 12;
-      if (isTrusted) score += 8;
+      else if (ageHours <= 48) score += 10;
+      if (mentionsPrimary) score += 18;
+      else if (isPrimaryRegion) score += 8;
+      if (isTrusted) score += 7;
       score += Math.max(0, 24 - ageHours);
 
       scored.push({
@@ -419,7 +568,8 @@ router.get('/news', async (req, res) => {
         source: item.source,
         publishedAt: new Date(item.pubDateMs).toISOString(),
         ageHours: Number(ageHours.toFixed(1)),
-        region: isHallein ? 'Hallein' : 'Salzburg',
+        region: isPrimaryRegion ? effectivePrimary : effectiveSecondary || effectivePrimary,
+        isPrimaryRegion,
         summary: item.summary,
         score,
       });
@@ -427,18 +577,31 @@ router.get('/news', async (req, res) => {
   }
 
   scored.sort((a, b) => b.score - a.score);
-  const last24h = scored.filter((x) => x.ageHours <= 24);
-  const picked = (last24h.length >= 10 ? last24h : scored)
-    .slice(0, 10)
-    .map(({ score: _s, ...item }) => item);
 
+  // Balanced Top 10: if both primary and secondary regions exist, reserve up to 4 slots for primary region stories so local town news isn't drowned out!
+  let selected: (LocalNewsItem & { score: number })[] = [];
+  if (effectiveSecondary) {
+    const primaryPool = scored.filter((x) => x.isPrimaryRegion);
+    const secondaryPool = scored.filter((x) => !x.isPrimaryRegion);
+    const takePrimary = primaryPool.slice(0, 5);
+    const usedIds = new Set(takePrimary.map((x) => x.id));
+    const remaining = [...secondaryPool, ...primaryPool.slice(5)].filter((x) => !usedIds.has(x.id));
+    selected = [...takePrimary, ...remaining].slice(0, 10).sort((a, b) => b.score - a.score);
+  } else {
+    selected = scored.slice(0, 10);
+  }
+
+  const last24hCount = scored.filter((x) => x.ageHours <= 24).length;
   const snapshot: LocalNewsSnapshot = {
     updatedAt: new Date().toISOString(),
-    items: picked,
-    last24hCount: last24h.length,
+    country,
+    language: cfg.lang,
+    regionPrimary: effectivePrimary,
+    regionSecondary: effectiveSecondary,
+    items: selected.map(({ score: _s, ...item }) => item),
+    last24hCount,
   };
-  newsCache.at = Date.now();
-  newsCache.data = snapshot;
+  newsCache.set(cacheKey, { at: Date.now(), data: snapshot });
   res.json(snapshot);
 });
 

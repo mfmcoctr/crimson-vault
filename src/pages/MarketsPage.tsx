@@ -329,16 +329,20 @@ export const MarketsPage: React.FC<MarketsPageProps> = ({ settings, onUpdateSett
                   Avusturya Resmi E-Control Spritpreisrechner verisi (En ucuz 5 açık istasyon)
                 </p>
               </div>
-              <div className="flex rounded-xl bg-black/45 border border-white/10 p-1 text-xs">
+              <div className="flex flex-wrap gap-1 rounded-xl bg-black/45 border border-white/10 p-1 text-xs">
                 {[
-                  { id: 'hallein' as const, label: 'Hallein (5400)' },
-                  { id: 'salzburg' as const, label: 'Salzburg (5020)' },
+                  { id: 'hallein', label: 'Hallein' },
+                  { id: 'salzburg', label: 'Salzburg' },
+                  { id: 'wien', label: 'Wien' },
+                  { id: 'graz', label: 'Graz' },
+                  { id: 'linz', label: 'Linz' },
+                  { id: 'innsbruck', label: 'Innsbruck' },
                 ].map((loc) => (
                   <button
                     key={loc.id}
                     onClick={() => onUpdateSettings({ fuelCity: loc.id })}
-                    className={`px-3.5 py-1.5 rounded-lg font-medium cursor-pointer transition-all ${
-                      city === loc.id ? 'bg-[#9F1239] text-white' : 'text-[#C8B5BC] hover:text-white'
+                    className={`px-3 py-1.5 rounded-lg font-medium cursor-pointer transition-all ${
+                      city.toLowerCase() === loc.id ? 'bg-[#9F1239] text-white' : 'text-[#C8B5BC] hover:text-white'
                     }`}
                   >
                     {loc.label}
@@ -431,3 +435,4 @@ export const MarketsPage: React.FC<MarketsPageProps> = ({ settings, onUpdateSett
     </div>
   );
 };
+

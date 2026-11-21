@@ -256,16 +256,23 @@ export const api = {
     }>('/api/settings/backup/import', { method: 'POST', body: fd });
   },
 
-  // --- Markets, Fuel, Hallein/Salzburg News & Deals ---
-  getMarkets: (city?: 'hallein' | 'salzburg', refresh = false) =>
+  // --- Markets, Fuel, Regional News & Deals ---
+  getMarkets: (city?: string, refresh = false) =>
     request<MarketsSnapshot>(
       `/api/feeds/markets?${new URLSearchParams({
         ...(city ? { city } : {}),
         ...(refresh ? { refresh: '1' } : {}),
       }).toString()}`,
     ),
-  getLocalNews: (refresh = false) =>
-    request<LocalNewsSnapshot>(`/api/feeds/news${refresh ? '?refresh=1' : ''}`),
+  getLocalNews: (refresh = false, override?: { country?: string; primary?: string; secondary?: string }) =>
+    request<LocalNewsSnapshot>(
+      `/api/feeds/news?${new URLSearchParams({
+        ...(refresh ? { refresh: '1' } : {}),
+        ...(override?.country ? { country: override.country } : {}),
+        ...(override?.primary !== undefined ? { primary: override.primary } : {}),
+        ...(override?.secondary !== undefined ? { secondary: override.secondary } : {}),
+      }).toString()}`,
+    ),
   getDeals: () => request<TrackedProduct[]>('/api/feeds/deals'),
   inspectDealUrl: (url: string) =>
     request<{
