@@ -20,6 +20,7 @@ import { auditPasswords, evaluatePasswordStrength } from '../utils/passwordUtils
 import { Modal } from '../components/Modal';
 import { PasswordGeneratorModal } from '../components/PasswordGeneratorModal';
 import { useToast } from '../components/Toast';
+import { useI18n } from '../i18n';
 
 const CATEGORIES = ['Genel', 'Finans', 'Sosyal', 'İş', 'Geliştirme', 'E-posta', 'Alışveriş', 'Diğer'];
 
@@ -48,6 +49,7 @@ export const PasswordsPage: React.FC<PasswordsPageProps> = ({
   clipboardClearSeconds,
   initialFilter,
 }) => {
+  const { lang, t, categoryLabel } = useI18n();
   const { notify, copySecret } = useToast();
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState<string>(initialFilter || 'all');
@@ -80,12 +82,12 @@ export const PasswordsPage: React.FC<PasswordsPageProps> = ({
           return false;
         }
         if (!q) return true;
-        return [p.title, p.username, p.url, p.category, p.notes, p.tags.join(' ')].some((f) =>
-          f.toLowerCase().includes(q),
+        return [p.title, p.username, p.url, p.category, categoryLabel(p.category), p.notes, p.tags.join(' ')].some(
+          (f) => f.toLowerCase().includes(q),
         );
       })
       .sort((a, b) => Number(b.favorite) - Number(a.favorite));
-  }, [passwords, search, categoryFilter, audit]);
+  }, [passwords, search, categoryFilter, audit, categoryLabel]);
 
   const openCreate = () => {
     setEditing(null);
@@ -120,7 +122,7 @@ export const PasswordsPage: React.FC<PasswordsPageProps> = ({
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.title?.trim()) {
-      notify('Lütfen bir başlık girin.', 'error');
+      notify(t('pwd.titleRequired'), 'error');
       return;
     }
     setSaving(true);
@@ -129,30 +131,30 @@ export const PasswordsPage: React.FC<PasswordsPageProps> = ({
         ...form,
         tags: tagsText
           .split(',')
-          .map((t) => t.trim())
+          .map((x) => x.trim())
           .filter(Boolean),
         customFields: (form.customFields || []).filter((cf) => cf.label.trim() || cf.value.trim()),
       };
       if (editing) {
         await api.updatePassword(editing.id, payload);
-        notify('Şifre kaydı güncellendi.');
+        notify(t('pwd.updatedToast'));
       } else {
         await api.createPassword(payload);
-        notify('Yeni şifre güvenle şifrelenip kaydedildi.');
+        notify(t('pwd.createdToast'));
       }
       setModalOpen(false);
       await onRefresh();
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Kaydedilemedi.', 'error');
+      notify(err instanceof Error ? err.message : t('common.saveFailed'), 'error');
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (p: PasswordEntry) => {
-    if (!window.confirm(`"${p.title}" şifre kaydını silmek istediğinize emin misiniz?`)) return;
+    if (!window.confirm(t('pwd.deleteConfirm', { title: p.title }))) return;
     await api.deletePassword(p.id);
-    notify('Şifre kaydı silindi.');
+    notify(t('pwd.deletedToast'));
     await onRefresh();
   };
 
@@ -178,27 +180,29 @@ export const PasswordsPage: React.FC<PasswordsPageProps> = ({
     }));
   };
 
-  const formStrength = evaluatePasswordStrength(form.password || '');
+  const formStrength = evaluatePasswordStrength(form.password || '', lang);
 
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="font-display text-2xl font-semibold text-white">Şifre Kasası</h1>
+          <h1 className="font-display text-2xl font-semibold text-white">{t('pwd.title')}</h1>
           <p className="text-sm text-[#C8B5BC] mt-0.5">
-            Tüm parolalarınız AES-256-GCM ile şifrelenir · Güvenlik Skoru:{' '}
-            <span className="text-white font-semibold">%{audit.healthScore}</span>
+            {t('pwd.subtitle')}{' '}
+            <span className="text-white font-semibold">
+              {lang === 'tr' ? `%${audit.healthScore}` : `${audit.healthScore}%`}
+            </span>
           </p>
         </div>
         <div className="flex gap-2.5">
           <button onClick={() => setGenOpen(true)} className="pv-btn-secondary">
             <Sparkles className="w-4 h-4 text-rose-300" />
-            Şifre Üret
+            {t('dash.generatePass')}
           </button>
           <button onClick={openCreate} className="pv-btn-primary">
             <Plus className="w-4 h-4" />
-            Yeni Şifre
+            {t('pwd.newBtn')}
           </button>
         </div>
       </div>
@@ -210,22 +214,22 @@ export const PasswordsPage: React.FC<PasswordsPageProps> = ({
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Başlık, kullanıcı adı, URL veya etiket ara..."
+            placeholder={t('pwd.searchPlaceholder')}
             className="pv-input pl-10"
           />
         </div>
 
         <div className="flex flex-wrap gap-2">
           {[
-            { id: 'all', label: `Tümü (${passwords.length})` },
-            { id: 'favorites', label: `Favoriler (${passwords.filter((p) => p.favorite).length})` },
+            { id: 'all', label: t('pwd.allPill', { count: passwords.length }) },
+            { id: 'favorites', label: t('pwd.favoritesPill', { count: passwords.filter((p) => p.favorite).length }) },
             ...(audit.weakIds.size > 0
-              ? [{ id: 'weak', label: `Zayıf (${audit.weakIds.size})`, warn: true }]
+              ? [{ id: 'weak', label: t('pwd.weakPill', { count: audit.weakIds.size }), warn: true }]
               : []),
             ...(audit.reusedIds.size > 0
-              ? [{ id: 'reused', label: `Tekrarlanan (${audit.reusedIds.size})`, warn: true }]
+              ? [{ id: 'reused', label: t('pwd.reusedPill', { count: audit.reusedIds.size }), warn: true }]
               : []),
-            ...CATEGORIES.map((c) => ({ id: c, label: c })),
+            ...CATEGORIES.map((c) => ({ id: c, label: categoryLabel(c) })),
           ].map((pill) => {
             const active = categoryFilter === pill.id;
             return (
@@ -251,20 +255,18 @@ export const PasswordsPage: React.FC<PasswordsPageProps> = ({
       {filtered.length === 0 ? (
         <div className="pv-glass rounded-2xl p-12 text-center space-y-3">
           <KeyRound className="w-10 h-10 text-rose-400/70 mx-auto" />
-          <div className="text-base font-medium text-white">Kayıtlı şifre bulunamadı</div>
-          <p className="text-sm text-[#A8929A]">
-            İlk şifre kaydınızı ekleyerek yerel şifreli kasanızı kullanmaya başlayın.
-          </p>
+          <div className="text-base font-medium text-white">{t('pwd.emptyTitle')}</div>
+          <p className="text-sm text-[#A8929A]">{t('pwd.emptyDesc')}</p>
           <button onClick={openCreate} className="pv-btn-primary mt-2">
             <Plus className="w-4 h-4" />
-            Yeni Şifre Ekle
+            {t('pwd.addBtn')}
           </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
           {filtered.map((p) => {
             const revealed = revealedIds.has(p.id);
-            const strength = evaluatePasswordStrength(p.password);
+            const strength = evaluatePasswordStrength(p.password, lang);
             const isWeak = audit.weakIds.has(p.id);
             const isReused = audit.reusedIds.has(p.id);
 
@@ -283,7 +285,7 @@ export const PasswordsPage: React.FC<PasswordsPageProps> = ({
                         <div className="flex items-center gap-2">
                           <h3 className="font-semibold text-white truncate">{p.title}</h3>
                           <span className="text-[10px] px-2 py-0.5 rounded-full bg-white/8 text-[#D7C7CC]">
-                            {p.category}
+                            {categoryLabel(p.category)}
                           </span>
                         </div>
                         {p.url && (
@@ -306,21 +308,21 @@ export const PasswordsPage: React.FC<PasswordsPageProps> = ({
                         className={`p-1.5 rounded-lg transition-colors cursor-pointer ${
                           p.favorite ? 'text-amber-400' : 'text-[#9C868E] hover:text-white'
                         }`}
-                        title="Favori"
+                        title={t('pwd.favorite')}
                       >
                         <Star className="w-4 h-4" fill={p.favorite ? 'currentColor' : 'none'} />
                       </button>
                       <button
                         onClick={() => openEdit(p)}
                         className="p-1.5 rounded-lg text-[#C8B5BC] hover:text-white hover:bg-white/10 cursor-pointer"
-                        title="Düzenle"
+                        title={t('common.edit')}
                       >
                         <Pencil className="w-4 h-4" />
                       </button>
                       <button
                         onClick={() => handleDelete(p)}
                         className="p-1.5 rounded-lg text-[#C8B5BC] hover:text-rose-300 hover:bg-rose-950/60 cursor-pointer"
-                        title="Sil"
+                        title={t('common.delete')}
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -332,13 +334,13 @@ export const PasswordsPage: React.FC<PasswordsPageProps> = ({
                     {p.username && (
                       <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-black/45 border border-white/8">
                         <div className="min-w-0">
-                          <div className="text-[10px] uppercase tracking-wider text-[#9C868E]">Kullanıcı / E-posta</div>
+                          <div className="text-[10px] uppercase tracking-wider text-[#9C868E]">{t('pwd.userEmail')}</div>
                           <div className="text-sm text-[#F8F4F5] truncate font-mono-code">{p.username}</div>
                         </div>
                         <button
-                          onClick={() => copySecret(p.username, 'Kullanıcı adı', 0)}
+                          onClick={() => copySecret(p.username, t('pwd.usernameLabel'), 0)}
                           className="p-1.5 rounded-lg bg-white/5 hover:bg-white/12 text-[#D7C7CC] hover:text-white cursor-pointer"
-                          title="Kullanıcı adını kopyala"
+                          title={t('pwd.copyUsername')}
                         >
                           <Copy className="w-3.5 h-3.5" />
                         </button>
@@ -348,7 +350,7 @@ export const PasswordsPage: React.FC<PasswordsPageProps> = ({
                     <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-black/45 border border-white/8">
                       <div className="min-w-0 flex-1">
                         <div className="text-[10px] uppercase tracking-wider text-[#9C868E] flex items-center gap-2">
-                          <span>Parola</span>
+                          <span>{t('pwd.passwordLabel')}</span>
                           <span className={strength.textColor}>· {strength.label}</span>
                         </div>
                         <div className="text-sm text-white truncate font-mono-code">
@@ -359,14 +361,16 @@ export const PasswordsPage: React.FC<PasswordsPageProps> = ({
                         <button
                           onClick={() => toggleReveal(p.id)}
                           className="p-1.5 rounded-lg bg-white/5 hover:bg-white/12 text-[#D7C7CC] hover:text-white cursor-pointer"
-                          title={revealed ? 'Gizle' : 'Göster'}
+                          title={revealed ? t('common.hide') : t('common.show')}
                         >
                           {revealed ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                         </button>
                         <button
-                          onClick={() => copySecret(p.password, `${p.title} parolası`, clipboardClearSeconds)}
+                          onClick={() =>
+                            copySecret(p.password, t('pwd.passwordOf', { title: p.title }), clipboardClearSeconds)
+                          }
                           className="p-1.5 rounded-lg bg-[#9F1239]/55 hover:bg-[#BE123C] text-white cursor-pointer"
-                          title="Parolayı kopyala"
+                          title={t('pwd.copyPassword')}
                         >
                           <Copy className="w-3.5 h-3.5" />
                         </button>
@@ -379,9 +383,11 @@ export const PasswordsPage: React.FC<PasswordsPageProps> = ({
                       {p.customFields.map((cf, i) => (
                         <button
                           key={i}
-                          onClick={() => copySecret(cf.value, cf.label || 'Özel alan', cf.secret ? clipboardClearSeconds : 0)}
+                          onClick={() =>
+                            copySecret(cf.value, cf.label || t('pwd.customFieldLabel'), cf.secret ? clipboardClearSeconds : 0)
+                          }
                           className="text-[11px] px-2.5 py-1 rounded-lg bg-white/5 hover:bg-white/12 border border-white/10 text-[#E4D5DA] cursor-pointer"
-                          title="Kopyalamak için tıklayın"
+                          title={t('pwd.clickToCopy')}
                         >
                           <span className="text-[#9C868E]">{cf.label}:</span> {cf.secret ? '••••••' : cf.value}
                         </button>
@@ -395,17 +401,17 @@ export const PasswordsPage: React.FC<PasswordsPageProps> = ({
                   <div className="flex flex-wrap gap-1.5">
                     {isWeak && (
                       <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-amber-500/20 text-amber-200 border border-amber-400/30">
-                        <AlertTriangle className="w-3 h-3" /> Zayıf
+                        <AlertTriangle className="w-3 h-3" /> {t('pwd.weakBadge')}
                       </span>
                     )}
                     {isReused && (
                       <span className="inline-flex items-center gap-1 text-[11px] px-2 py-0.5 rounded-full bg-rose-500/25 text-rose-200 border border-rose-500/40">
-                        <ShieldAlert className="w-3 h-3" /> Tekrarlanan
+                        <ShieldAlert className="w-3 h-3" /> {t('pwd.reusedBadge')}
                       </span>
                     )}
-                    {p.tags.map((t) => (
-                      <span key={t} className="text-[11px] px-2 py-0.5 rounded-full bg-white/6 text-[#C8B5BC]">
-                        #{t}
+                    {p.tags.map((tag) => (
+                      <span key={tag} className="text-[11px] px-2 py-0.5 rounded-full bg-white/6 text-[#C8B5BC]">
+                        #{tag}
                       </span>
                     ))}
                   </div>
@@ -421,23 +427,23 @@ export const PasswordsPage: React.FC<PasswordsPageProps> = ({
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={editing ? 'Şifre Kaydını Düzenle' : 'Yeni Şifre Ekle'}
+        title={editing ? t('pwd.modalEdit') : t('pwd.modalCreate')}
         size="lg"
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">Başlık *</label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('pwd.fieldTitle')}</label>
               <input
                 value={form.title || ''}
                 onChange={(e) => setForm({ ...form, title: e.target.value })}
-                placeholder="Örn: GitHub, Garanti BBVA, Gmail"
+                placeholder={t('pwd.fieldTitlePlaceholder')}
                 className="pv-input"
                 required
               />
             </div>
             <div>
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">Kategori</label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('common.category')}</label>
               <select
                 value={form.category || 'Genel'}
                 onChange={(e) => setForm({ ...form, category: e.target.value })}
@@ -445,7 +451,7 @@ export const PasswordsPage: React.FC<PasswordsPageProps> = ({
               >
                 {CATEGORIES.map((c) => (
                   <option key={c} value={c}>
-                    {c}
+                    {categoryLabel(c)}
                   </option>
                 ))}
               </select>
@@ -454,16 +460,16 @@ export const PasswordsPage: React.FC<PasswordsPageProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">Kullanıcı Adı / E-posta</label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('pwd.fieldUsername')}</label>
               <input
                 value={form.username || ''}
                 onChange={(e) => setForm({ ...form, username: e.target.value })}
-                placeholder="kullanici@ornek.com"
+                placeholder={t('pwd.fieldUsernamePlaceholder')}
                 className="pv-input"
               />
             </div>
             <div>
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">Web Sitesi URL</label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('pwd.fieldUrl')}</label>
               <input
                 value={form.url || ''}
                 onChange={(e) => setForm({ ...form, url: e.target.value })}
@@ -475,14 +481,14 @@ export const PasswordsPage: React.FC<PasswordsPageProps> = ({
 
           <div>
             <div className="flex items-center justify-between mb-1.5">
-              <label className="text-xs text-[#D7C7CC]">Parola</label>
+              <label className="text-xs text-[#D7C7CC]">{t('pwd.passwordLabel')}</label>
               <button
                 type="button"
                 onClick={() => setGenOpen(true)}
                 className="text-xs text-rose-300 hover:text-rose-200 inline-flex items-center gap-1 cursor-pointer"
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                Güçlü Şifre Üret
+                {t('pwd.generateStrong')}
               </button>
             </div>
             <div className="relative">
@@ -490,7 +496,7 @@ export const PasswordsPage: React.FC<PasswordsPageProps> = ({
                 type={showFormPass ? 'text' : 'password'}
                 value={form.password || ''}
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
-                placeholder="Parolanızı girin veya üretin"
+                placeholder={t('pwd.fieldPasswordPlaceholder')}
                 className="pv-input pr-10 font-mono-code"
               />
               <button
@@ -516,11 +522,11 @@ export const PasswordsPage: React.FC<PasswordsPageProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 items-center">
             <div>
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">Etiketler (virgülle ayırın)</label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('pwd.fieldTags')}</label>
               <input
                 value={tagsText}
                 onChange={(e) => setTagsText(e.target.value)}
-                placeholder="2fa, kişisel, önemli"
+                placeholder={t('pwd.fieldTagsPlaceholder')}
                 className="pv-input"
               />
             </div>
@@ -531,20 +537,20 @@ export const PasswordsPage: React.FC<PasswordsPageProps> = ({
                 onChange={(e) => setForm({ ...form, favorite: e.target.checked })}
                 className="accent-[#BE123C] w-4 h-4"
               />
-              <span className="text-sm text-white">Favorilere ekle</span>
+              <span className="text-sm text-white">{t('pwd.addToFavorites')}</span>
             </label>
           </div>
 
           {/* Custom Fields */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-xs text-[#D7C7CC]">Özel Alanlar (Kurtarma Kodu, PIN, Güvenlik Sorusu vb.)</label>
+              <label className="text-xs text-[#D7C7CC]">{t('pwd.customFieldsLabel')}</label>
               <button
                 type="button"
                 onClick={addCustomField}
                 className="text-xs text-rose-300 hover:text-white cursor-pointer"
               >
-                + Alan Ekle
+                {t('pwd.addField')}
               </button>
             </div>
             {(form.customFields || []).map((cf, idx) => (
@@ -552,13 +558,13 @@ export const PasswordsPage: React.FC<PasswordsPageProps> = ({
                 <input
                   value={cf.label}
                   onChange={(e) => updateCustomField(idx, { label: e.target.value })}
-                  placeholder="Alan adı"
+                  placeholder={t('pwd.fieldNamePlaceholder')}
                   className="pv-input col-span-4 text-xs"
                 />
                 <input
                   value={cf.value}
                   onChange={(e) => updateCustomField(idx, { value: e.target.value })}
-                  placeholder="Değer"
+                  placeholder={t('pwd.fieldValuePlaceholder')}
                   className="pv-input col-span-5 text-xs font-mono-code"
                 />
                 <label className="col-span-2 flex items-center gap-1 text-xs text-[#D7C7CC] cursor-pointer">
@@ -568,7 +574,7 @@ export const PasswordsPage: React.FC<PasswordsPageProps> = ({
                     onChange={(e) => updateCustomField(idx, { secret: e.target.checked })}
                     className="accent-[#BE123C]"
                   />
-                  Gizli
+                  {t('pwd.secretCheckbox')}
                 </label>
                 <button
                   type="button"
@@ -582,22 +588,22 @@ export const PasswordsPage: React.FC<PasswordsPageProps> = ({
           </div>
 
           <div>
-            <label className="block text-xs text-[#D7C7CC] mb-1.5">Notlar</label>
+            <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('common.notes')}</label>
             <textarea
               rows={3}
               value={form.notes || ''}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              placeholder="Ek açıklamalar, 2FA bilgileri..."
+              placeholder={t('pwd.notesPlaceholder')}
               className="pv-input resize-none"
             />
           </div>
 
           <div className="flex justify-end gap-2.5 pt-3 border-t border-white/10">
             <button type="button" onClick={() => setModalOpen(false)} className="pv-btn-secondary">
-              İptal
+              {t('common.cancel')}
             </button>
             <button type="submit" disabled={saving} className="pv-btn-primary">
-              {saving ? 'Şifreleniyor...' : editing ? 'Güncelle' : 'Kaydet'}
+              {saving ? t('common.encrypting') : editing ? t('common.update') : t('common.save')}
             </button>
           </div>
         </form>
@@ -612,4 +618,3 @@ export const PasswordsPage: React.FC<PasswordsPageProps> = ({
     </div>
   );
 };
-

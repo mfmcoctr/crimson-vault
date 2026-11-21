@@ -14,6 +14,7 @@ import {
 } from 'lucide-react';
 import { api } from '../api';
 import type { GlobalSearchResult } from '../types';
+import { useI18n, type TranslationKey } from '../i18n';
 
 interface CommandPaletteProps {
   open: boolean;
@@ -23,16 +24,16 @@ interface CommandPaletteProps {
   onLock: () => void;
 }
 
-const KIND_META: Record<GlobalSearchResult['kind'], { label: string; icon: React.ReactNode }> = {
-  password: { label: 'Şifre', icon: <KeyRound className="w-4 h-4 text-rose-400" /> },
-  subscription: { label: 'Abonelik', icon: <CreditCard className="w-4 h-4 text-amber-300" /> },
-  note: { label: 'Not', icon: <StickyNote className="w-4 h-4 text-emerald-300" /> },
-  event: { label: 'Takvim', icon: <Calendar className="w-4 h-4 text-sky-300" /> },
-  client: { label: 'Müşteri', icon: <Briefcase className="w-4 h-4 text-rose-300" /> },
-  'client-credential': { label: 'Müşteri Erişimi', icon: <KeyRound className="w-4 h-4 text-rose-400" /> },
-  'client-note': { label: 'Müşteri Notu', icon: <FileText className="w-4 h-4 text-purple-300" /> },
-  'client-file': { label: 'Şifreli Dosya', icon: <FileKey2 className="w-4 h-4 text-amber-300" /> },
-  deal: { label: 'İndirim Takibi', icon: <ShoppingBag className="w-4 h-4 text-emerald-300" /> },
+const KIND_META: Record<GlobalSearchResult['kind'], { labelKey: TranslationKey; icon: React.ReactNode }> = {
+  password: { labelKey: 'cmd.kind.password', icon: <KeyRound className="w-4 h-4 text-rose-400" /> },
+  subscription: { labelKey: 'cmd.kind.subscription', icon: <CreditCard className="w-4 h-4 text-amber-300" /> },
+  note: { labelKey: 'cmd.kind.note', icon: <StickyNote className="w-4 h-4 text-emerald-300" /> },
+  event: { labelKey: 'cmd.kind.event', icon: <Calendar className="w-4 h-4 text-sky-300" /> },
+  client: { labelKey: 'cmd.kind.client', icon: <Briefcase className="w-4 h-4 text-rose-300" /> },
+  'client-credential': { labelKey: 'cmd.kind.client-credential', icon: <KeyRound className="w-4 h-4 text-rose-400" /> },
+  'client-note': { labelKey: 'cmd.kind.client-note', icon: <FileText className="w-4 h-4 text-purple-300" /> },
+  'client-file': { labelKey: 'cmd.kind.client-file', icon: <FileKey2 className="w-4 h-4 text-amber-300" /> },
+  deal: { labelKey: 'cmd.kind.deal', icon: <ShoppingBag className="w-4 h-4 text-emerald-300" /> },
 };
 
 export const CommandPalette: React.FC<CommandPaletteProps> = ({
@@ -42,6 +43,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   onOpenGenerator,
   onLock,
 }) => {
+  const { t } = useI18n();
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<GlobalSearchResult[]>([]);
   const [activeIdx, setActiveIdx] = useState(0);
@@ -83,8 +85,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
   const quickActions = [
     {
       id: 'act-gen',
-      title: 'Güçlü Şifre Üreticiyi Aç',
-      subtitle: 'Rastgele veya kelime bazlı kriptografik parola üret',
+      title: t('cmd.openGenerator'),
+      subtitle: t('cmd.openGeneratorSub'),
       icon: <Sparkles className="w-4 h-4 text-rose-300" />,
       run: () => {
         onClose();
@@ -93,8 +95,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     },
     {
       id: 'act-clients',
-      title: 'Müşteri Kasası / Toplu ZIP Yükle',
-      subtitle: 'Müşteri projeleri ve şifreli arşiv içe aktarma',
+      title: t('cmd.clientZip'),
+      subtitle: t('cmd.clientZipSub'),
       icon: <Briefcase className="w-4 h-4 text-rose-300" />,
       run: () => {
         onClose();
@@ -103,8 +105,8 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     },
     {
       id: 'act-lock',
-      title: 'Kasayı Şimdi Kilitle',
-      subtitle: 'Bellekteki şifreleme anahtarını temizle ve kilitle',
+      title: t('cmd.lockNow'),
+      subtitle: t('cmd.lockNowSub'),
       icon: <Lock className="w-4 h-4 text-rose-400" />,
       run: () => {
         onClose();
@@ -153,7 +155,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                 handleSelectResult(results[activeIdx]);
               }
             }}
-            placeholder="Şifre, abonelik, not, müşteri, domain veya şifreli dosya ara..."
+            placeholder={t('cmd.placeholder')}
             className="flex-1 bg-transparent text-white placeholder-[#9C868E] outline-none text-sm sm:text-base"
           />
           <kbd className="text-[11px] px-2 py-0.5 rounded bg-white/10 text-[#D7C7CC] border border-white/10">ESC</kbd>
@@ -163,7 +165,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
           {!query && (
             <div>
               <div className="px-3 py-1 text-[11px] uppercase tracking-wider text-[#9C868E] font-medium">
-                Hızlı İşlemler
+                {t('cmd.quickActions')}
               </div>
               {quickActions.map((act) => (
                 <button
@@ -185,12 +187,12 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
 
           <div>
             <div className="px-3 py-1 text-[11px] uppercase tracking-wider text-[#9C868E] font-medium flex items-center justify-between">
-              <span>{query ? 'Arama Sonuçları' : 'Son Kayıtlar'}</span>
-              {loading && <span className="text-rose-300">Aranıyor...</span>}
+              <span>{query ? t('cmd.searchResults') : t('cmd.recentItems')}</span>
+              {loading && <span className="text-rose-300">{t('cmd.searching')}</span>}
             </div>
             {results.length === 0 ? (
               <div className="py-8 text-center text-sm text-[#9C868E]">
-                {loading ? 'Kasa taranıyor...' : 'Eşleşen kayıt bulunamadı.'}
+                {loading ? t('cmd.scanning') : t('cmd.noResults')}
               </div>
             ) : (
               results.map((r, idx) => {
@@ -212,7 +214,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
                       <div className="text-xs text-[#B8A2AA] truncate">{r.subtitle}</div>
                     </div>
                     <span className="text-[11px] px-2 py-0.5 rounded-full bg-white/8 text-[#F8F4F5] border border-white/10 shrink-0">
-                      {r.badge || meta.label}
+                      {r.badge || t(meta.labelKey)}
                     </span>
                   </button>
                 );
@@ -224,4 +226,3 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     </div>
   );
 };
-

@@ -31,13 +31,14 @@ import type {
   TrackedProduct,
 } from '../types';
 import type { NavPage } from '../components/Layout';
+import { useI18n } from '../i18n';
 import { auditPasswords } from '../utils/passwordUtils';
 import { formatCurrency, summarizeSubscriptions } from '../utils/currencyUtils';
 import {
   computeNextOccurrence,
   daysBetween,
   formatCountdown,
-  formatTurkishDate,
+  formatLocalizedDate,
   parseIsoDate,
   startOfToday,
 } from '../utils/dateUtils';
@@ -65,6 +66,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   onNavigate,
   onOpenGenerator,
 }) => {
+  const { lang, locale, t } = useI18n();
   const [markets, setMarkets] = useState<MarketsSnapshot | null>(null);
   const [news, setNews] = useState<LocalNewsSnapshot | null>(null);
 
@@ -88,7 +90,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
         id: `ev-${ev.id}`,
         kind: ev.eventType,
         title: ev.title,
-        meta: occ.turningAge ? `${occ.turningAge} yaşına giriyor · ${formatTurkishDate(occ.nextIso)}` : formatTurkishDate(occ.nextIso),
+        meta: occ.turningAge
+          ? t('dash.turningAge', { age: occ.turningAge, date: formatLocalizedDate(occ.nextIso, lang) })
+          : formatLocalizedDate(occ.nextIso, lang),
         daysUntil: occ.daysUntil,
         page: 'calendar' as NavPage,
       };
@@ -98,8 +102,8 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       .map((s) => ({
         id: `sub-${s.id}`,
         kind: 'subscription' as const,
-        title: `${s.name} Yenilemesi`,
-        meta: `${formatCurrency(s.price, s.currency)} · ${formatTurkishDate(s.nextBillingDate)}`,
+        title: t('dash.renewalSuffix', { name: s.name }),
+        meta: `${formatCurrency(s.price, s.currency, lang)} · ${formatLocalizedDate(s.nextBillingDate, lang)}`,
         daysUntil: daysBetween(today, parseIsoDate(s.nextBillingDate)),
         page: 'subscriptions' as NavPage,
       })),
@@ -115,24 +119,18 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
       {/* Hero Welcome Bar */}
       <div className="pv-glass-crimson rounded-2xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <div className="text-xs uppercase tracking-[0.2em] text-rose-200/80 font-medium">
-            Şifreli Yerel Kasa · AES-256-GCM
-          </div>
-          <h1 className="font-display text-2xl sm:text-3xl font-semibold text-white mt-1">
-            Kasanıza Hoş Geldiniz
-          </h1>
-          <p className="text-sm text-[#E4D5DA] mt-1">
-            Şifreleriniz, abonelikleriniz, takvim hatırlatmalarınız ve müşteri kasalarınız yerel cihazınızda güvende.
-          </p>
+          <div className="text-xs uppercase tracking-[0.2em] text-rose-200/80 font-medium">{t('dash.badge')}</div>
+          <h1 className="font-display text-2xl sm:text-3xl font-semibold text-white mt-1">{t('dash.welcome')}</h1>
+          <p className="text-sm text-[#E4D5DA] mt-1">{t('dash.welcomeSub')}</p>
         </div>
         <div className="flex flex-wrap gap-2.5 shrink-0">
           <button onClick={() => onNavigate('clients')} className="pv-btn-primary">
             <Upload className="w-4 h-4" />
-            Müşteri ZIP Yükle
+            {t('dash.uploadClientZip')}
           </button>
           <button onClick={onOpenGenerator} className="pv-btn-secondary">
             <Sparkles className="w-4 h-4 text-rose-300" />
-            Şifre Üret
+            {t('dash.generatePass')}
           </button>
         </div>
       </div>
@@ -144,14 +142,14 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           className="pv-glass rounded-2xl p-5 text-left hover:border-rose-500/40 transition-all group cursor-pointer"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-[#C8B5BC]">Kayıtlı Şifreler</span>
+            <span className="text-xs font-medium text-[#C8B5BC]">{t('dash.savedPasswords')}</span>
             <div className="w-9 h-9 rounded-xl bg-[#9F1239]/25 border border-rose-500/30 flex items-center justify-center text-rose-300">
               <KeyRound className="w-4 h-4" />
             </div>
           </div>
           <div className="text-2xl font-bold text-white mt-3">{passwords.length}</div>
           <div className="text-xs text-[#B8A2AA] mt-1 flex items-center justify-between">
-            <span>Güvenlik Skoru: %{audit.healthScore}</span>
+            <span>{t('dash.securityScore', { score: audit.healthScore })}</span>
             <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 text-rose-300 transition-opacity" />
           </div>
         </button>
@@ -161,16 +159,16 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           className="pv-glass rounded-2xl p-5 text-left hover:border-rose-500/40 transition-all group cursor-pointer"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-[#C8B5BC]">Aylık Abonelik Gideri</span>
+            <span className="text-xs font-medium text-[#C8B5BC]">{t('dash.monthlySubCost')}</span>
             <div className="w-9 h-9 rounded-xl bg-amber-500/15 border border-amber-400/25 flex items-center justify-center text-amber-300">
               <CreditCard className="w-4 h-4" />
             </div>
           </div>
           <div className="text-2xl font-bold text-white mt-3">
-            {formatCurrency(subSummary.monthlyTotal, settings.defaultCurrency)}
+            {formatCurrency(subSummary.monthlyTotal, settings.defaultCurrency, lang)}
           </div>
           <div className="text-xs text-[#B8A2AA] mt-1 flex items-center justify-between">
-            <span>Yıllık: {formatCurrency(subSummary.yearlyTotal, settings.defaultCurrency)}</span>
+            <span>{t('dash.yearly', { amount: formatCurrency(subSummary.yearlyTotal, settings.defaultCurrency, lang) })}</span>
             <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 text-rose-300 transition-opacity" />
           </div>
         </button>
@@ -180,7 +178,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           className="pv-glass rounded-2xl p-5 text-left hover:border-rose-500/40 transition-all group cursor-pointer"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-[#C8B5BC]">Müşteri Kasaları</span>
+            <span className="text-xs font-medium text-[#C8B5BC]">{t('dash.clientVaults')}</span>
             <div className="w-9 h-9 rounded-xl bg-rose-500/20 border border-rose-400/30 flex items-center justify-center text-rose-200">
               <Briefcase className="w-4 h-4" />
             </div>
@@ -188,8 +186,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           <div className="text-2xl font-bold text-white mt-3">{clients.length}</div>
           <div className="text-xs text-[#B8A2AA] mt-1 flex items-center justify-between">
             <span>
-              {clients.reduce((s, c) => s + (c.credentialCount || 0), 0)} erişim ·{' '}
-              {clients.reduce((s, c) => s + (c.fileCount || 0), 0)} şifreli dosya
+              {t('dash.clientStats', {
+                creds: clients.reduce((s, c) => s + (c.credentialCount || 0), 0),
+                files: clients.reduce((s, c) => s + (c.fileCount || 0), 0),
+              })}
             </span>
             <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 text-rose-300 transition-opacity" />
           </div>
@@ -200,17 +200,17 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           className="pv-glass rounded-2xl p-5 text-left hover:border-rose-500/40 transition-all group cursor-pointer"
         >
           <div className="flex items-center justify-between">
-            <span className="text-xs font-medium text-[#C8B5BC]">Takvim & Notlar</span>
+            <span className="text-xs font-medium text-[#C8B5BC]">{t('dash.calendarNotes')}</span>
             <div className="w-9 h-9 rounded-xl bg-emerald-500/15 border border-emerald-400/25 flex items-center justify-center text-emerald-300">
               <Calendar className="w-4 h-4" />
             </div>
           </div>
           <div className="text-2xl font-bold text-white mt-3">
-            {events.length} <span className="text-sm font-normal text-[#B8A2AA]">tarih</span> · {notes.length}{' '}
-            <span className="text-sm font-normal text-[#B8A2AA]">not</span>
+            {events.length} <span className="text-sm font-normal text-[#B8A2AA]">{t('dash.datesUnit')}</span> ·{' '}
+            {notes.length} <span className="text-sm font-normal text-[#B8A2AA]">{t('dash.notesUnit')}</span>
           </div>
           <div className="text-xs text-[#B8A2AA] mt-1 flex items-center justify-between">
-            <span>{upcomingItems.length} yaklaşan hatırlatma</span>
+            <span>{t('dash.upcomingCount', { count: upcomingItems.length })}</span>
             <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 text-rose-300 transition-opacity" />
           </div>
         </button>
@@ -225,27 +225,27 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           <div className="flex items-center justify-between text-xs">
             <span className="text-rose-200 font-semibold flex items-center gap-1.5">
               <TrendingUp className="w-3.5 h-3.5 text-rose-400" />
-              Canlı Piyasa & Altın
+              {t('dash.liveMarketGold')}
             </span>
-            <span className="text-[#9C868E]">Detay →</span>
+            <span className="text-[#9C868E]">{t('dash.details')}</span>
           </div>
           {markets ? (
             <div className="grid grid-cols-3 gap-2 text-xs">
               <div className="rounded-lg bg-black/40 p-2">
                 <div className="text-[10px] text-[#A8929A]">BTC</div>
                 <div className="font-mono-code font-bold text-white mt-0.5">
-                  {btc ? `€${Math.round(btc.eur).toLocaleString('tr-TR')}` : '—'}
+                  {btc ? `€${Math.round(btc.eur).toLocaleString(locale)}` : '—'}
                 </div>
               </div>
               <div className="rounded-lg bg-black/40 p-2">
                 <div className="text-[10px] text-[#A8929A]">ETH</div>
                 <div className="font-mono-code font-bold text-white mt-0.5">
-                  {eth ? `€${Math.round(eth.eur).toLocaleString('tr-TR')}` : '—'}
+                  {eth ? `€${Math.round(eth.eur).toLocaleString(locale)}` : '—'}
                 </div>
               </div>
               <div className="rounded-lg bg-black/40 p-2">
                 <div className="text-[10px] text-amber-200 flex items-center gap-0.5">
-                  <Coins className="w-2.5 h-2.5" /> Gram Altın
+                  <Coins className="w-2.5 h-2.5" /> {t('dash.gramGold')}
                 </div>
                 <div className="font-mono-code font-bold text-white mt-0.5">
                   {markets.metals ? `€${markets.metals.goldGramEur.toFixed(1)}` : '—'}
@@ -253,7 +253,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               </div>
             </div>
           ) : (
-            <div className="text-xs text-[#9C868E]">Yükleniyor...</div>
+            <div className="text-xs text-[#9C868E]">{t('common.loading')}</div>
           )}
           {markets && (
             <div className="flex items-center justify-between text-[11px] text-[#D7C7CC] pt-1 border-t border-white/8">
@@ -265,7 +265,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                 </strong>
               </span>
               <span>
-                Dizel:{' '}
+                {t('dash.diesel')}{' '}
                 <strong className="font-mono-code text-amber-300">
                   {markets.fuel.diesel.cheapest ? `€${markets.fuel.diesel.cheapest.toFixed(3)}` : '—'}
                 </strong>
@@ -281,9 +281,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           <div className="flex items-center justify-between text-xs">
             <span className="text-rose-200 font-semibold flex items-center gap-1.5">
               <Newspaper className="w-3.5 h-3.5 text-rose-400" />
-              {[settings.newsRegionPrimary, settings.newsRegionSecondary].filter(Boolean).join(' & ') || 'Bölge'} Top 10
+              {[settings.newsRegionPrimary, settings.newsRegionSecondary].filter(Boolean).join(' & ') || t('dash.localNewsTitle')} Top 10
             </span>
-            <span className="text-[#9C868E]">Tümü →</span>
+            <span className="text-[#9C868E]">{t('dash.viewAll')}</span>
           </div>
           {news && news.items.length > 0 ? (
             <div className="space-y-1.5">
@@ -295,10 +295,10 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               ))}
             </div>
           ) : (
-            <div className="text-xs text-[#9C868E]">Son 24 saat haberleri yükleniyor...</div>
+            <div className="text-xs text-[#9C868E]">{t('dash.newsLoading')}</div>
           )}
           <div className="text-[11px] text-[#A8929A]">
-            {news ? `Son 24 saatte ${news.last24hCount} bölge haberi` : 'ORF Salzburg + Bölge Basını'}
+            {news ? t('dash.newsLast24h', { count: news.last24hCount }) : t('dash.newsSource')}
           </div>
         </button>
 
@@ -309,21 +309,19 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           <div className="flex items-center justify-between text-xs">
             <span className="text-rose-200 font-semibold flex items-center gap-1.5">
               <ShoppingBag className="w-3.5 h-3.5 text-rose-400" />
-              İndirim & Ürün Takibi
+              {t('dash.dealsTitle')}
             </span>
-            <span className="text-[#9C868E]">Yönet →</span>
+            <span className="text-[#9C868E]">{t('dash.manage')}</span>
           </div>
           <div className="flex items-baseline gap-3">
             <span className="text-2xl font-bold text-white">{deals.length}</span>
-            <span className="text-xs text-[#C8B5BC]">takip edilen ürün</span>
+            <span className="text-xs text-[#C8B5BC]">{t('dash.trackedProducts')}</span>
           </div>
           <div className="text-xs">
             {dealHits.length > 0 ? (
-              <span className="text-emerald-300 font-medium">
-                🎯 {dealHits.length} ürün hedef indirim fiyatına ulaştı!
-              </span>
+              <span className="text-emerald-300 font-medium">{t('dash.dealsHit', { count: dealHits.length })}</span>
             ) : (
-              <span className="text-[#A8929A]">Amazon, Temu, AliExpress fiyat alarmları</span>
+              <span className="text-[#A8929A]">{t('dash.dealsSub')}</span>
             )}
           </div>
         </button>
@@ -337,19 +335,17 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-base font-semibold text-white flex items-center gap-2">
                 <Calendar className="w-4 h-4 text-rose-400" />
-                Yaklaşan Önemli Tarihler & Yenilemeler
+                {t('dash.upcomingHeader')}
               </h2>
               <button
                 onClick={() => onNavigate('calendar')}
                 className="text-xs text-rose-300 hover:text-white transition-colors cursor-pointer"
               >
-                Takvime Git →
+                {t('dash.goCalendar')}
               </button>
             </div>
             {upcomingItems.length === 0 ? (
-              <div className="py-10 text-center text-sm text-[#A8929A]">
-                Önümüzdeki 45 gün içinde kayıtlı doğum günü, etkinlik veya yenileme bulunmuyor.
-              </div>
+              <div className="py-10 text-center text-sm text-[#A8929A]">{t('dash.noUpcoming')}</div>
             ) : (
               <div className="space-y-2.5">
                 {upcomingItems.map((item) => (
@@ -388,7 +384,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                             : 'bg-white/8 text-[#D7C7CC]'
                       }`}
                     >
-                      {formatCountdown(item.daysUntil)}
+                      {formatCountdown(item.daysUntil, lang)}
                     </span>
                   </button>
                 ))}
@@ -401,19 +397,17 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-base font-semibold text-white flex items-center gap-2">
                 <Pin className="w-4 h-4 text-rose-400" />
-                Sabitlenmiş Güvenli Notlar
+                {t('dash.pinnedNotes')}
               </h2>
               <button
                 onClick={() => onNavigate('notes')}
                 className="text-xs text-rose-300 hover:text-white transition-colors cursor-pointer"
               >
-                Tüm Notlar →
+                {t('dash.allNotes')}
               </button>
             </div>
             {pinnedNotes.length === 0 ? (
-              <div className="py-7 text-center text-sm text-[#A8929A]">
-                Henüz sabitlenmiş not yok. Önemli notlarınızı sabitleyerek burada hızlıca görebilirsiniz.
-              </div>
+              <div className="py-7 text-center text-sm text-[#A8929A]">{t('dash.noPinnedNotes')}</div>
             ) : (
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 {pinnedNotes.map((n) => (
@@ -427,7 +421,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                       <span className="truncate">{n.title}</span>
                     </div>
                     <p className="text-xs text-[#B8A2AA] line-clamp-2 mt-1.5">
-                      {n.content.replace(/[#*_`>]/g, '') || 'İçerik boş'}
+                      {n.content.replace(/[#*_`>]/g, '') || t('dash.emptyContent')}
                     </p>
                   </button>
                 ))}
@@ -442,9 +436,11 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-base font-semibold text-white flex items-center gap-2">
                 <ShieldCheck className="w-4 h-4 text-rose-400" />
-                Şifre Güvenlik Sağlığı
+                {t('dash.passwordHealth')}
               </h2>
-              <span className="font-mono-code text-lg font-bold text-white">%{audit.healthScore}</span>
+              <span className="font-mono-code text-lg font-bold text-white">
+                {lang === 'tr' ? `%${audit.healthScore}` : `${audit.healthScore}%`}
+              </span>
             </div>
 
             <div className="h-2.5 w-full rounded-full bg-white/10 overflow-hidden mb-4">
@@ -467,7 +463,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               >
                 <div className="flex items-center gap-2 text-xs text-[#C8B5BC]">
                   <AlertTriangle className="w-3.5 h-3.5 text-amber-400" />
-                  Zayıf Şifre
+                  {t('dash.weakPass')}
                 </div>
                 <div className="text-xl font-bold text-white mt-1">{audit.weakIds.size}</div>
               </button>
@@ -477,7 +473,7 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
               >
                 <div className="flex items-center gap-2 text-xs text-[#C8B5BC]">
                   <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
-                  Tekrarlanan
+                  {t('dash.reusedPass')}
                 </div>
                 <div className="text-xl font-bold text-white mt-1">{audit.reusedIds.size}</div>
               </button>
@@ -488,23 +484,21 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
             <div className="flex items-center justify-between mb-4">
               <h2 className="text-base font-semibold text-white flex items-center gap-2">
                 <Briefcase className="w-4 h-4 text-rose-400" />
-                Müşteri Kasaları
+                {t('dash.clientVaults')}
               </h2>
               <button
                 onClick={() => onNavigate('clients')}
                 className="text-xs text-rose-300 hover:text-white transition-colors cursor-pointer"
               >
-                Tümünü Yönet →
+                {t('dash.manageAll')}
               </button>
             </div>
             {clients.length === 0 ? (
               <div className="py-7 text-center space-y-3">
-                <p className="text-sm text-[#A8929A]">
-                  Web sitesi müşterileriniz için ayrı şifreli kasalar oluşturun veya toplu ZIP arşivi yükleyin.
-                </p>
+                <p className="text-sm text-[#A8929A]">{t('dash.noClientsDesc')}</p>
                 <button onClick={() => onNavigate('clients')} className="pv-btn-secondary text-xs">
                   <Upload className="w-3.5 h-3.5 text-rose-300" />
-                  İlk Müşteri Kasasını Oluştur
+                  {t('dash.createFirstClient')}
                 </button>
               </div>
             ) : (
@@ -517,10 +511,12 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
                   >
                     <div className="min-w-0">
                       <div className="text-sm font-medium text-white truncate">{c.name}</div>
-                      <div className="text-xs text-[#B8A2AA] truncate">{c.domain || c.company || 'Domain eklenmemiş'}</div>
+                      <div className="text-xs text-[#B8A2AA] truncate">
+                        {c.domain || c.company || t('dash.noDomain')}
+                      </div>
                     </div>
                     <div className="text-[11px] text-rose-200 bg-rose-950/60 border border-rose-500/25 px-2.5 py-1 rounded-full shrink-0">
-                      {c.credentialCount || 0} şifre · {c.fileCount || 0} dosya
+                      {t('dash.clientRowStats', { creds: c.credentialCount || 0, files: c.fileCount || 0 })}
                     </div>
                   </button>
                 ))}
@@ -532,4 +528,3 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
     </div>
   );
 };
-

@@ -1,4 +1,4 @@
-import type { BillingCycle, CurrencyCode, SubscriptionEntry } from '../types';
+import type { AppLanguage, BillingCycle, CurrencyCode, SubscriptionEntry } from '../types';
 
 export const CURRENCY_SYMBOLS: Record<CurrencyCode, string> = {
   TRY: '₺',
@@ -7,16 +7,44 @@ export const CURRENCY_SYMBOLS: Record<CurrencyCode, string> = {
   GBP: '£',
 };
 
-export const BILLING_CYCLE_LABELS: Record<BillingCycle, string> = {
-  weekly: 'Haftalık',
-  monthly: 'Aylık',
-  quarterly: '3 Aylık',
-  yearly: 'Yıllık',
-  once: 'Tek Seferlik',
+export const BILLING_CYCLE_LABELS_BY_LANG: Record<AppLanguage, Record<BillingCycle, string>> = {
+  tr: {
+    weekly: 'Haftalık',
+    monthly: 'Aylık',
+    quarterly: '3 Aylık',
+    yearly: 'Yıllık',
+    once: 'Tek Seferlik',
+  },
+  en: {
+    weekly: 'Weekly',
+    monthly: 'Monthly',
+    quarterly: 'Quarterly',
+    yearly: 'Yearly',
+    once: 'One-time',
+  },
+  de: {
+    weekly: 'Wöchentlich',
+    monthly: 'Monatlich',
+    quarterly: 'Vierteljährlich',
+    yearly: 'Jährlich',
+    once: 'Einmalig',
+  },
 };
 
-export function formatCurrency(amount: number, currency: CurrencyCode): string {
-  const formatted = new Intl.NumberFormat('tr-TR', {
+export const BILLING_CYCLE_LABELS: Record<BillingCycle, string> = BILLING_CYCLE_LABELS_BY_LANG.tr;
+
+export function getBillingCycleLabel(cycle: BillingCycle, lang: AppLanguage = 'tr'): string {
+  return BILLING_CYCLE_LABELS_BY_LANG[lang]?.[cycle] || BILLING_CYCLE_LABELS_BY_LANG.tr[cycle];
+}
+
+export function getNumberLocale(lang: AppLanguage = 'tr'): string {
+  if (lang === 'en') return 'en-US';
+  if (lang === 'de') return 'de-AT';
+  return 'tr-TR';
+}
+
+export function formatCurrency(amount: number, currency: CurrencyCode, lang: AppLanguage = 'tr'): string {
+  const formatted = new Intl.NumberFormat(getNumberLocale(lang), {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(amount);
@@ -98,4 +126,3 @@ export function summarizeSubscriptions(
     byOriginalCurrency,
   };
 }
-

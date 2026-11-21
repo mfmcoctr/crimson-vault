@@ -6,6 +6,7 @@ import {
   Copy,
   Download,
   FolderOpen,
+  Globe,
   Image as ImageIcon,
   KeyRound,
   RefreshCw,
@@ -18,8 +19,10 @@ import {
   Wifi,
 } from 'lucide-react';
 import { api } from '../api';
-import type { AppSettings, BackgroundFit, BackgroundMode, CurrencyCode, MobileAccessInfo } from '../types';
+import type { AppLanguage, AppSettings, BackgroundFit, BackgroundMode, CurrencyCode, MobileAccessInfo } from '../types';
 import { useToast } from '../components/Toast';
+import { useI18n } from '../i18n';
+import { LanguageSwitcher } from '../components/LanguageSwitcher';
 
 interface SettingsPageProps {
   settings: AppSettings;
@@ -34,6 +37,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   onSettingsReplaced,
   onVaultRestored,
 }) => {
+  const { t } = useI18n();
   const { notify, copySecret } = useToast();
   const bgInputRef = useRef<HTMLInputElement>(null);
   const backupInputRef = useRef<HTMLInputElement>(null);
@@ -58,18 +62,23 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     loadMobileInfo();
   }, []);
 
+  const handleLanguagePersist = async (nextLang: AppLanguage) => {
+    await onUpdateSettings({ language: nextLang });
+    notify(t('set.langUpdated'));
+  };
+
   const handleEnableTailscaleServe = async () => {
     setEnablingServe(true);
     try {
       const updated = await api.enableTailscaleServe();
       setMobileInfo(updated);
       if (updated.serveActive && updated.tailscaleHttpsUrl) {
-        notify(`Tailscale HTTPS tüneli açıldı: ${updated.tailscaleHttpsUrl}`);
+        notify(t('set.tsTunnelOpened', { url: updated.tailscaleHttpsUrl }));
       } else {
-        notify('Tailscale serve komutu çalıştırıldı. Durumu kontrol edin.', 'info');
+        notify(t('set.tsServeRan'), 'info');
       }
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Tailscale serve başlatılamadı.', 'error');
+      notify(err instanceof Error ? err.message : t('set.tsServeFailed'), 'error');
     } finally {
       setEnablingServe(false);
     }
@@ -109,7 +118,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         GBP: Number(rates.GBP) || 46.2,
       },
     });
-    notify('Para birimi ve döviz kurları güncellendi.');
+    notify(t('set.currencySaved'));
   };
 
   const handleUploadBg = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -118,9 +127,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     try {
       const next = await api.uploadCustomBackground(file);
       onSettingsReplaced(next);
-      notify('Özel arka plan görseliniz uygulandı!');
+      notify(t('set.bgUploaded'));
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Görsel yüklenemedi.', 'error');
+      notify(err instanceof Error ? err.message : t('set.bgUploadError'), 'error');
     } finally {
       e.target.value = '';
     }
@@ -129,12 +138,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const handleResetBg = async () => {
     const next = await api.resetBackground();
     onSettingsReplaced(next);
-    notify('Varsayılan dark fantasy görseline dönüldü.');
+    notify(t('set.bgReset'));
   };
 
   const handleApplyFolderSlideshow = async () => {
     if (!folderPathInput.trim()) {
-      notify('Lütfen görsellerin bulunduğu yerel klasör yolunu girin.', 'error');
+      notify(t('set.folderRequired'), 'error');
       return;
     }
     setTestingFolder(true);
@@ -143,7 +152,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       const check = await api.testBackgroundFolder(folderPathInput.trim(), settings.slideshowIncludeSubfolders);
       setFolderCheckResult({ count: check.count, resolvedPath: check.resolvedPath });
       if (check.count === 0) {
-        notify('Klasör bulundu ancak içinde desteklenen görsel (.jpg/.png/.webp/.gif/.avif) bulunamadı.', 'info');
+        notify(t('set.folderEmpty'), 'info');
         return;
       }
       await onUpdateSettings({
@@ -151,9 +160,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         backgroundFolderPath: check.resolvedPath,
       });
       setFolderPathInput(check.resolvedPath);
-      notify(`Klasör slayt gösterisi aktif! ${check.count} görsel bulundu.`);
+      notify(t('set.folderActive', { count: check.count }));
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Klasör doğrulanamadı.', 'error');
+      notify(err instanceof Error ? err.message : t('set.folderError'), 'error');
     } finally {
       setTestingFolder(false);
     }
@@ -162,11 +171,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const handleChangeMasterPassword = async (e: React.FormEvent) => {
     e.preventDefault();
     if (newPassword.length < 6) {
-      notify('Yeni ana parola en az 6 karakter olmalıdır.', 'error');
+      notify(t('set.passMinError'), 'error');
       return;
     }
     if (newPassword !== confirmPassword) {
-      notify('Yeni parolalar eşleşmiyor.', 'error');
+      notify(t('set.passMismatch'), 'error');
       return;
     }
     setChangingPass(true);
@@ -175,9 +184,9 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      notify('Ana parolanız başarıyla değiştirildi ve kasa anahtarı yeniden sarıldı.');
+      notify(t('set.passChanged'));
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Parola değiştirilemedi.', 'error');
+      notify(err instanceof Error ? err.message : t('set.passChangeError'), 'error');
     } finally {
       setChangingPass(false);
     }
@@ -186,7 +195,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const handleExportBackup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (exportPass.length < 6) {
-      notify('Yedek parolası en az 6 karakter olmalıdır.', 'error');
+      notify(t('set.backupPassMin'), 'error');
       return;
     }
     setExporting(true);
@@ -195,13 +204,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `personvault-yedek-${new Date().toISOString().slice(0, 10)}.pvault`;
+      a.download = `personvault-backup-${new Date().toISOString().slice(0, 10)}.pvault`;
       a.click();
       URL.revokeObjectURL(url);
       setExportPass('');
-      notify('Şifreli tam kasa yedeği (.pvault) indirildi.');
+      notify(t('set.backupDownloaded'));
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Yedek alınamadı.', 'error');
+      notify(err instanceof Error ? err.message : t('set.backupExportError'), 'error');
     } finally {
       setExporting(false);
     }
@@ -210,13 +219,10 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   const handleImportBackup = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!importFile || !importPass) {
-      notify('Lütfen yedek dosyasını seçip parolasını girin.', 'error');
+      notify(t('set.backupImportSelect'), 'error');
       return;
     }
-    if (
-      importMode === 'replace' &&
-      !window.confirm('DİKKAT: "Tüm Kasayı Değiştir" mevcut kayıtlarınızı yedekle değiştirecektir. Devam edilsin mi?')
-    ) {
+    if (importMode === 'replace' && !window.confirm(t('set.backupReplaceConfirm'))) {
       return;
     }
     setImporting(true);
@@ -226,10 +232,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       setImportPass('');
       await onVaultRestored();
       notify(
-        `Yedek geri yüklendi! (${res.restored.passwords} şifre, ${res.restored.subscriptions} abonelik, ${res.restored.clients} müşteri)`,
+        t('set.backupRestored', {
+          passwords: res.restored.passwords,
+          subscriptions: res.restored.subscriptions,
+          clients: res.restored.clients,
+        }),
       );
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Yedek geri yüklenemedi.', 'error');
+      notify(err instanceof Error ? err.message : t('set.backupImportError'), 'error');
     } finally {
       setImporting(false);
     }
@@ -237,36 +247,48 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
   const handleTestNotification = async () => {
     if (!('Notification' in window)) {
-      notify('Bu tarayıcı bildirim API desteklemiyor.', 'error');
+      notify(t('set.notifNotSupported'), 'error');
       return;
     }
     const perm = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
     if (perm === 'granted') {
-      new Notification('PersonVault Test Bildirimi', {
-        body: 'Doğum günleri ve abonelik hatırlatmaları bu şekilde görünecektir.',
+      new Notification(t('set.testNotifTitle'), {
+        body: t('set.testNotifBody'),
       });
-      notify('Test bildirimi gönderildi.');
+      notify(t('set.testNotifSent'));
     } else {
-      notify('Tarayıcı bildirim izni reddedildi.', 'error');
+      notify(t('set.testNotifDenied'), 'error');
     }
   };
 
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="font-display text-2xl font-semibold text-white">Ayarlar, Görünüm & Şifreli Yedekleme</h1>
-        <p className="text-sm text-[#C8B5BC] mt-0.5">
-          Dark fantasy arka plan görünürlüğünü, döviz kurlarını, kasa güvenliğini ve şifreli yedeklerinizi yönetin.
-        </p>
+        <h1 className="font-display text-2xl font-semibold text-white">{t('set.title')}</h1>
+        <p className="text-sm text-[#C8B5BC] mt-0.5">{t('set.subtitle')}</p>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Language Switcher Card (Full Width) */}
+        <div className="lg:col-span-2 pv-glass rounded-2xl p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
+          <div className="space-y-1">
+            <div className="flex items-center gap-2.5 text-base font-semibold text-white">
+              <Globe className="w-5 h-5 text-rose-400" />
+              <span>{t('set.langTitle')}</span>
+            </div>
+            <p className="text-xs text-[#C8B5BC]">{t('set.langDesc')}</p>
+          </div>
+          <div className="w-full md:w-[360px] shrink-0">
+            <LanguageSwitcher variant="full" onSelect={handleLanguagePersist} />
+          </div>
+        </div>
+
         {/* Mobile Access & Tailscale HTTPS Pairing (Full Width Card) */}
         <div className="lg:col-span-2 pv-glass-crimson rounded-2xl p-6 space-y-4">
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div className="flex items-center gap-2.5 text-base font-semibold text-white">
               <Smartphone className="w-5 h-5 text-rose-300" />
-              <span>Mobil Erişim & Tailscale HTTPS (Evde + Dışarıda Senkron PWA)</span>
+              <span>{t('set.mobileTitle')}</span>
             </div>
             <button
               type="button"
@@ -275,7 +297,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               className="pv-btn-secondary text-xs py-1.5"
             >
               <RefreshCw className={`w-3.5 h-3.5 ${loadingMobile ? 'animate-spin' : ''}`} />
-              Durumu Yenile
+              {t('set.refreshStatus')}
             </button>
           </div>
 
@@ -290,7 +312,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                       : 'bg-amber-500/20 text-amber-200 border-amber-400/35'
                   }`}
                 >
-                  Tailscale: {mobileInfo ? (mobileInfo.tailscaleInstalled ? 'Kurulu ✓' : 'Kurulu Değil') : 'Kontrol ediliyor...'}
+                  Tailscale:{' '}
+                  {mobileInfo
+                    ? mobileInfo.tailscaleInstalled
+                      ? t('set.tsInstalled')
+                      : t('set.tsNotInstalled')
+                    : t('set.tsChecking')}
                 </span>
                 <span
                   className={`px-2.5 py-1 rounded-full border ${
@@ -299,7 +326,8 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                       : 'bg-white/10 text-[#D7C7CC] border-white/15'
                   }`}
                 >
-                  Oturum: {mobileInfo?.tailscaleRunning ? 'Bağlı ✓' : 'Giriş Bekleniyor'}
+                  {t('set.sessionLabel')}{' '}
+                  {mobileInfo?.tailscaleRunning ? t('set.sessionConnected') : t('set.sessionWaiting')}
                 </span>
                 <span
                   className={`px-2.5 py-1 rounded-full border ${
@@ -308,26 +336,24 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                       : 'bg-white/10 text-[#D7C7CC] border-white/15'
                   }`}
                 >
-                  HTTPS Tünel: {mobileInfo?.serveActive ? 'Aktif ✓' : 'Kapalı'}
+                  {t('set.tunnelLabel')} {mobileInfo?.serveActive ? t('set.tunnelActive') : t('set.tunnelOff')}
                 </span>
               </div>
 
               {mobileInfo?.tailscaleHttpsUrl ? (
                 <div className="rounded-xl bg-black/50 border border-rose-500/35 p-3.5 space-y-2.5">
-                  <div className="text-[11px] uppercase tracking-wider text-rose-200">
-                    Kişisel Mobil HTTPS Adresiniz (Evde & 4G/5G'de Geçerli)
-                  </div>
+                  <div className="text-[11px] uppercase tracking-wider text-rose-200">{t('set.personalHttps')}</div>
                   <div className="flex items-center gap-2">
                     <code className="flex-1 font-mono-code text-sm text-white break-all">
                       {mobileInfo.tailscaleHttpsUrl}
                     </code>
                     <button
                       type="button"
-                      onClick={() => copySecret(mobileInfo.tailscaleHttpsUrl, 'Tailscale HTTPS adresi', 0)}
+                      onClick={() => copySecret(mobileInfo.tailscaleHttpsUrl, t('set.tailscaleAddrLabel'), 0)}
                       className="pv-btn-secondary text-xs py-1.5 shrink-0"
                     >
                       <Copy className="w-3.5 h-3.5" />
-                      Kopyala
+                      {t('common.copy')}
                     </button>
                   </div>
                   {!mobileInfo.serveActive && (
@@ -338,29 +364,19 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                       className="pv-btn-primary text-xs"
                     >
                       <Wifi className="w-3.5 h-3.5" />
-                      {enablingServe ? 'HTTPS Tüneli Açılıyor...' : 'Tailscale HTTPS Tünelini Şimdi Aç (tailscale serve)'}
+                      {enablingServe ? t('set.openingTunnel') : t('set.enableTunnelBtn')}
                     </button>
                   )}
                 </div>
               ) : (
                 <div className="rounded-xl bg-black/45 border border-white/10 p-3.5 text-xs text-[#E4D5DA] space-y-2">
-                  <p>
-                    1. Bilgisayarınızda <strong className="text-white">Tailscale</strong> uygulamasını açıp Google/GitHub/Apple hesabınızla giriş yapın (veya klasördeki <code className="text-rose-200">tailscale-setup.bat</code> dosyasına çift tıklayın).
-                  </p>
-                  <p>
-                    2. Telefonunuza da <strong className="text-white">Tailscale</strong> uygulamasını (App Store / Google Play) kurup aynı hesapla giriş yapın.
-                  </p>
-                  <p>
-                    3. Yukarıdaki <strong className="text-white">Durumu Yenile</strong> düğmesine bastığınızda kişisel <code className="text-rose-200">https://...ts.net</code> adresiniz ve QR kodunuz burada hazır olacak.
-                  </p>
+                  <p>{t('set.tsStep1')}</p>
+                  <p>{t('set.tsStep2')}</p>
+                  <p>{t('set.tsStep3')}</p>
                 </div>
               )}
 
-              <div className="text-[11px] text-[#D7C7CC] leading-relaxed">
-                <strong className="text-white">Telefonda Uygulama Gibi Kurma (PWA):</strong> QR kodu telefon kamerasıyla okutup linki açın →
-                Android Chrome'da <em>Menü (⋮) → Uygulamayı Yükle / Ana Ekrana Ekle</em>, iPhone Safari'de <em>Paylaş → Ana Ekrana Ekle</em> seçin.
-                PC ve telefon aynı anda açık kalarak gerçek zamanlı senkron çalışır.
-              </div>
+              <div className="text-[11px] text-[#D7C7CC] leading-relaxed">{t('set.pwaHint')}</div>
             </div>
 
             {/* Scannable QR Code */}
@@ -372,12 +388,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     dangerouslySetInnerHTML={{ __html: mobileInfo.qrSvg }}
                   />
                   <span className="text-[11px] text-rose-200 text-center">
-                    {mobileInfo.tailscaleHttpsUrl ? 'Tailscale HTTPS QR' : 'Yerel Ağ QR'}
+                    {mobileInfo.tailscaleHttpsUrl ? t('set.qrTailscale') : t('set.qrLan')}
                   </span>
                 </div>
               ) : (
                 <div className="w-40 h-40 rounded-2xl bg-black/40 border border-white/10 flex items-center justify-center text-xs text-[#9C868E]">
-                  QR hazırlanıyor...
+                  {t('set.qrPreparing')}
                 </div>
               )}
             </div>
@@ -388,15 +404,15 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         <div className="pv-glass rounded-2xl p-6 space-y-5">
           <div className="flex items-center gap-2.5 text-base font-semibold text-white">
             <Sliders className="w-5 h-5 text-rose-400" />
-            <span>Görünüm, Arka Plan & Klasör Slayt Gösterisi</span>
+            <span>{t('set.appearanceTitle')}</span>
           </div>
 
           {/* 3-way Background Mode Switcher */}
           <div className="grid grid-cols-3 gap-1.5 p-1 rounded-xl bg-black/45 border border-white/10 text-xs">
             {[
-              { id: 'default' as BackgroundMode, label: 'Varsayılan' },
-              { id: 'custom' as BackgroundMode, label: 'Tek Görsel' },
-              { id: 'folder' as BackgroundMode, label: 'Klasör Slaytı' },
+              { id: 'default' as BackgroundMode, label: t('set.bgDefault') },
+              { id: 'custom' as BackgroundMode, label: t('set.bgCustom') },
+              { id: 'folder' as BackgroundMode, label: t('set.bgFolder') },
             ].map((m) => (
               <button
                 key={m.id}
@@ -419,13 +435,13 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               <div>
                 <label className="block text-xs text-[#D7C7CC] mb-1.5 flex items-center gap-1.5">
                   <FolderOpen className="w-3.5 h-3.5 text-rose-400" />
-                  Yerel Görsel Klasör Yolu
+                  {t('set.folderPathLabel')}
                 </label>
                 <div className="flex gap-2">
                   <input
                     value={folderPathInput}
                     onChange={(e) => setFolderPathInput(e.target.value)}
-                    placeholder="Örn: D:\Resimler\ArkaPlanlar"
+                    placeholder={t('set.folderPathPlaceholder')}
                     className="pv-input text-xs font-mono-code flex-1"
                   />
                   <button
@@ -434,14 +450,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     disabled={testingFolder}
                     className="pv-btn-primary text-xs shrink-0"
                   >
-                    {testingFolder ? 'Taranıyor...' : 'Doğrula & Uygula'}
+                    {testingFolder ? t('set.scanning') : t('set.verifyApply')}
                   </button>
                 </div>
                 {folderCheckResult && (
                   <div className="text-[11px] text-emerald-300 mt-1.5 flex items-center gap-1.5">
                     <CheckCircle2 className="w-3.5 h-3.5 shrink-0" />
                     <span>
-                      {folderCheckResult.count} görsel hazır ({folderCheckResult.resolvedPath})
+                      {t('set.folderReady', { count: folderCheckResult.count, path: folderCheckResult.resolvedPath })}
                     </span>
                   </div>
                 )}
@@ -450,7 +466,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               {/* Slideshow Interval */}
               <div>
                 <div className="flex items-center justify-between text-xs mb-1.5">
-                  <span className="text-[#D7C7CC]">Otomatik Geçiş Süresi</span>
+                  <span className="text-[#D7C7CC]">{t('set.slideInterval')}</span>
                   <div className="flex items-center gap-1.5">
                     <input
                       type="number"
@@ -462,7 +478,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                       }
                       className="w-16 px-2 py-0.5 rounded-lg bg-black/60 border border-white/15 text-right font-mono-code text-white text-xs"
                     />
-                    <span className="text-[#B8A2AA]">sn</span>
+                    <span className="text-[#B8A2AA]">{t('set.secShort')}</span>
                   </div>
                 </div>
                 <input
@@ -476,12 +492,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 />
                 <div className="flex flex-wrap gap-1.5 mt-2">
                   {[
-                    { s: 5, l: '5 sn' },
-                    { s: 15, l: '15 sn' },
-                    { s: 30, l: '30 sn' },
-                    { s: 60, l: '1 dk' },
-                    { s: 180, l: '3 dk' },
-                    { s: 300, l: '5 dk' },
+                    { s: 5, l: `5 ${t('set.secShort')}` },
+                    { s: 15, l: `15 ${t('set.secShort')}` },
+                    { s: 30, l: `30 ${t('set.secShort')}` },
+                    { s: 60, l: `1 ${t('set.minShort')}` },
+                    { s: 180, l: `3 ${t('set.minShort')}` },
+                    { s: 300, l: `5 ${t('set.minShort')}` },
                   ].map((p) => (
                     <button
                       key={p.s}
@@ -507,7 +523,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     onChange={(e) => onUpdateSettings({ slideshowShuffle: e.target.checked })}
                     className="accent-[#BE123C]"
                   />
-                  <span className="text-white">Karışık Sıra (Shuffle)</span>
+                  <span className="text-white">{t('set.shuffle')}</span>
                 </label>
                 <label className="flex items-center gap-2 px-3 py-2 rounded-lg bg-white/5 border border-white/10 cursor-pointer">
                   <input
@@ -516,32 +532,30 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                     onChange={(e) => onUpdateSettings({ slideshowIncludeSubfolders: e.target.checked })}
                     className="accent-[#BE123C]"
                   />
-                  <span className="text-white">Alt Klasörleri Dahil Et</span>
+                  <span className="text-white">{t('set.subfolders')}</span>
                 </label>
               </div>
 
               <div>
-                <label className="block text-xs text-[#D7C7CC] mb-1">Görsel Sığdırma Modu</label>
+                <label className="block text-xs text-[#D7C7CC] mb-1">{t('set.bgFitLabel')}</label>
                 <select
                   value={settings.backgroundFit}
                   onChange={(e) => onUpdateSettings({ backgroundFit: e.target.value as BackgroundFit })}
                   className="pv-select w-full text-xs"
                 >
-                  <option value="cover">Tam Ekran Doldur (Cover)</option>
-                  <option value="contain">Kırpmadan Tam Göster + Bulanık Kenarlık (Dikey Görseller İçin İdeal)</option>
+                  <option value="cover">{t('set.bgFitCover')}</option>
+                  <option value="contain">{t('set.bgFitContain')}</option>
                 </select>
               </div>
 
-              <p className="text-[11px] text-[#A8929A]">
-                Gizlilik notu: Klasördeki slayt görselleri yalnızca kasa kilidiniz açıldıktan sonra yüklenir; üst çubuktan slaytı duraklatabilir veya ileri/geri geçebilirsiniz.
-              </p>
+              <p className="text-[11px] text-[#A8929A]">{t('set.folderPrivacyNote')}</p>
             </div>
           )}
 
           <div className="space-y-4">
             <div>
               <div className="flex justify-between text-xs mb-1.5">
-                <span className="text-[#D7C7CC]">Arka Plan Görünürlüğü (Opaklık)</span>
+                <span className="text-[#D7C7CC]">{t('set.bgOpacity')}</span>
                 <span className="font-mono-code text-white">{Math.round(settings.backgroundOpacity * 100)}%</span>
               </div>
               <input
@@ -557,7 +571,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
             <div>
               <div className="flex justify-between text-xs mb-1.5">
-                <span className="text-[#D7C7CC]">Arka Plan Bulanıklığı (Blur)</span>
+                <span className="text-[#D7C7CC]">{t('set.bgBlur')}</span>
                 <span className="font-mono-code text-white">{settings.backgroundBlur}px</span>
               </div>
               <input
@@ -573,7 +587,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
 
             <div>
               <div className="flex justify-between text-xs mb-1.5">
-                <span className="text-[#D7C7CC]">Cam Kart Opaklığı (Okunabilirlik)</span>
+                <span className="text-[#D7C7CC]">{t('set.cardOpacity')}</span>
                 <span className="font-mono-code text-white">{Math.round(settings.cardOpacity * 100)}%</span>
               </div>
               <input
@@ -598,12 +612,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 />
                 <button type="button" onClick={() => bgInputRef.current?.click()} className="pv-btn-primary text-xs">
                   <ImageIcon className="w-4 h-4" />
-                  Tek Özel Görsel Yükle
+                  {t('set.uploadSingleBg')}
                 </button>
                 {settings.hasCustomBackground && (
                   <button type="button" onClick={handleResetBg} className="pv-btn-secondary text-xs">
                     <RotateCcw className="w-3.5 h-3.5" />
-                    Varsayılan Dark Fantasy Görseline Dön
+                    {t('set.resetBg')}
                   </button>
                 )}
               </div>
@@ -615,21 +629,21 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         <form onSubmit={handleSaveCurrency} className="pv-glass rounded-2xl p-6 space-y-5">
           <div className="flex items-center gap-2.5 text-base font-semibold text-white">
             <Coins className="w-5 h-5 text-rose-400" />
-            <span>Para Birimi & Döviz Kurları</span>
+            <span>{t('set.currencyTitle')}</span>
           </div>
 
           <div className="space-y-4">
             <div>
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">Varsayılan Özet Para Birimi</label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('set.defaultCurrency')}</label>
               <select
                 value={defaultCurrency}
                 onChange={(e) => setDefaultCurrency(e.target.value as CurrencyCode)}
                 className="pv-select w-full"
               >
-                <option value="TRY">Türk Lirası (TRY ₺)</option>
-                <option value="USD">Amerikan Doları (USD $)</option>
-                <option value="EUR">Euro (EUR €)</option>
-                <option value="GBP">İngiliz Sterlini (GBP £)</option>
+                <option value="TRY">{t('set.currTry')}</option>
+                <option value="USD">{t('set.currUsd')}</option>
+                <option value="EUR">{t('set.currEur')}</option>
+                <option value="GBP">{t('set.currGbp')}</option>
               </select>
             </div>
 
@@ -666,14 +680,12 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
               </div>
             </div>
 
-            <p className="text-[11px] text-[#A8929A]">
-              Uygulama tamamen çevrimdışı yerel çalıştığı için abonelik maliyet toplamı burada girdiğiniz kurlarla hesaplanır.
-            </p>
+            <p className="text-[11px] text-[#A8929A]">{t('set.offlineRateNote')}</p>
 
             <div className="flex justify-end">
               <button type="submit" className="pv-btn-primary text-xs">
                 <Save className="w-4 h-4" />
-                Kurları Kaydet
+                {t('set.saveRates')}
               </button>
             </div>
           </div>
@@ -683,57 +695,57 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         <div className="pv-glass rounded-2xl p-6 space-y-5">
           <div className="flex items-center gap-2.5 text-base font-semibold text-white">
             <Shield className="w-5 h-5 text-rose-400" />
-            <span>Güvenlik & Oturum Tercihleri</span>
+            <span>{t('set.securityTitle')}</span>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">Pano Otomatik Temizleme</label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('set.clipboardClear')}</label>
               <select
                 value={settings.clipboardClearSeconds}
                 onChange={(e) => onUpdateSettings({ clipboardClearSeconds: Number(e.target.value) })}
                 className="pv-select w-full"
               >
-                <option value={0}>Kapalı</option>
-                <option value={15}>15 saniye sonra</option>
-                <option value={30}>30 saniye sonra</option>
-                <option value={60}>60 saniye sonra</option>
+                <option value={0}>{t('set.off')}</option>
+                <option value={15}>{t('set.afterSec', { n: 15 })}</option>
+                <option value={30}>{t('set.afterSec', { n: 30 })}</option>
+                <option value={60}>{t('set.afterSec', { n: 60 })}</option>
               </select>
             </div>
             <div>
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">Otomatik Kilitlenme</label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('set.autoLock')}</label>
               <select
                 value={settings.autoLockMinutes}
                 onChange={(e) => onUpdateSettings({ autoLockMinutes: Number(e.target.value) })}
                 className="pv-select w-full"
               >
-                <option value={0}>Kapalı (Uygulama açıkken kilitleme)</option>
-                <option value={5}>5 dakika hareketsizlik</option>
-                <option value={15}>15 dakika hareketsizlik</option>
-                <option value={30}>30 dakika hareketsizlik</option>
-                <option value={60}>60 dakika hareketsizlik</option>
+                <option value={0}>{t('set.autoLockOff')}</option>
+                <option value={5}>{t('set.afterMinInactivity', { n: 5 })}</option>
+                <option value={15}>{t('set.afterMinInactivity', { n: 15 })}</option>
+                <option value={30}>{t('set.afterMinInactivity', { n: 30 })}</option>
+                <option value={60}>{t('set.afterMinInactivity', { n: 60 })}</option>
               </select>
             </div>
           </div>
 
           <div className="flex items-center justify-between pt-1">
-            <span className="text-xs text-[#D7C7CC]">Masaüstü / Tarayıcı Hatırlatma Bildirimleri</span>
+            <span className="text-xs text-[#D7C7CC]">{t('set.desktopNotif')}</span>
             <button type="button" onClick={handleTestNotification} className="pv-btn-secondary text-xs py-1.5">
               <Bell className="w-3.5 h-3.5 text-rose-300" />
-              Test Bildirimi Gönder
+              {t('set.sendTestNotif')}
             </button>
           </div>
 
           <form onSubmit={handleChangeMasterPassword} className="pt-4 border-t border-white/10 space-y-3">
             <div className="text-xs font-semibold text-white flex items-center gap-1.5">
               <KeyRound className="w-3.5 h-3.5 text-rose-400" />
-              Ana Parolayı Değiştir
+              {t('set.changeMasterPass')}
             </div>
             <input
               type="password"
               value={currentPassword}
               onChange={(e) => setCurrentPassword(e.target.value)}
-              placeholder="Mevcut ana parola"
+              placeholder={t('set.currentMasterPass')}
               className="pv-input text-xs"
               required
             />
@@ -742,7 +754,7 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 type="password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
-                placeholder="Yeni ana parola (min 6)"
+                placeholder={t('set.newMasterPass')}
                 className="pv-input text-xs"
                 required
               />
@@ -750,14 +762,14 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 type="password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
-                placeholder="Yeni ana parola (tekrar)"
+                placeholder={t('set.confirmNewMasterPass')}
                 className="pv-input text-xs"
                 required
               />
             </div>
             <div className="flex justify-end">
               <button type="submit" disabled={changingPass} className="pv-btn-secondary text-xs">
-                {changingPass ? 'Güncelleniyor...' : 'Ana Parolayı Güncelle'}
+                {changingPass ? t('set.updating') : t('set.updateMasterPass')}
               </button>
             </div>
           </form>
@@ -767,36 +779,32 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
         <div className="pv-glass-crimson rounded-2xl p-6 space-y-5">
           <div className="flex items-center gap-2.5 text-base font-semibold text-white">
             <Download className="w-5 h-5 text-rose-300" />
-            <span>Şifreli Kasa Yedeği (Export / Import)</span>
+            <span>{t('set.backupTitle')}</span>
           </div>
 
           {/* Export */}
           <form onSubmit={handleExportBackup} className="space-y-3">
-            <div className="text-xs font-medium text-rose-100">
-              Tam Yedek Al (.pvault — AES-256-GCM şifreli)
-            </div>
-            <p className="text-xs text-[#D7C7CC]">
-              Tüm şifreler, abonelikler, notlar, takvim kayıtları, müşteri kasaları ve şifreli dosyalar tek bir şifreli yedek dosyasına paketlenir.
-            </p>
+            <div className="text-xs font-medium text-rose-100">{t('set.exportSubtitle')}</div>
+            <p className="text-xs text-[#D7C7CC]">{t('set.exportDesc')}</p>
             <div className="flex gap-2">
               <input
                 type="password"
                 value={exportPass}
                 onChange={(e) => setExportPass(e.target.value)}
-                placeholder="Yedek şifreleme parolası (min 6 karakter)"
+                placeholder={t('set.exportPassPlaceholder')}
                 className="pv-input text-xs flex-1"
                 required
               />
               <button type="submit" disabled={exporting} className="pv-btn-primary text-xs shrink-0">
                 <Download className="w-4 h-4" />
-                {exporting ? 'Hazırlanıyor...' : 'Yedeği İndir'}
+                {exporting ? t('cli.preparing') : t('set.downloadBackup')}
               </button>
             </div>
           </form>
 
           {/* Import */}
           <form onSubmit={handleImportBackup} className="pt-4 border-t border-white/15 space-y-3">
-            <div className="text-xs font-medium text-rose-100">Şifreli Yedekten Geri Yükle</div>
+            <div className="text-xs font-medium text-rose-100">{t('set.importTitle')}</div>
             <input
               ref={backupInputRef}
               type="file"
@@ -811,15 +819,15 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 className="pv-btn-secondary text-xs"
               >
                 <Upload className="w-3.5 h-3.5" />
-                {importFile ? importFile.name : '.pvault Dosyası Seç'}
+                {importFile ? importFile.name : t('set.choosePvault')}
               </button>
               <select
                 value={importMode}
                 onChange={(e) => setImportMode(e.target.value as 'merge' | 'replace')}
                 className="pv-select text-xs py-1.5"
               >
-                <option value="merge">Mevcut verilerle birleştir</option>
-                <option value="replace">Tüm kasayı yedekle değiştir</option>
+                <option value="merge">{t('set.mergeMode')}</option>
+                <option value="replace">{t('set.replaceMode')}</option>
               </select>
             </div>
             <div className="flex gap-2">
@@ -827,15 +835,11 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
                 type="password"
                 value={importPass}
                 onChange={(e) => setImportPass(e.target.value)}
-                placeholder="Yedek dosyasının parolası"
+                placeholder={t('set.importPassPlaceholder')}
                 className="pv-input text-xs flex-1"
               />
-              <button
-                type="submit"
-                disabled={importing || !importFile}
-                className="pv-btn-primary text-xs shrink-0"
-              >
-                {importing ? 'Çözülüyor...' : 'Geri Yükle'}
+              <button type="submit" disabled={importing || !importFile} className="pv-btn-primary text-xs shrink-0">
+                {importing ? t('cli.decryptingArchive') : t('set.restoreBtn')}
               </button>
             </div>
           </form>
@@ -844,4 +848,3 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
     </div>
   );
 };
-

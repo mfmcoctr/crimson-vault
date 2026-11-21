@@ -3,14 +3,15 @@ import { Clock, ExternalLink, Globe, Languages, MapPin, Newspaper, RefreshCw, Sa
 import { api } from '../api';
 import type { AppSettings, LocalNewsSnapshot, NewsCountryCode } from '../types';
 import { useToast } from '../components/Toast';
+import { useI18n } from '../i18n';
 
 const COUNTRIES: { code: NewsCountryCode; label: string }[] = [
-  { code: 'AT', label: 'Avusturya (AT)' },
+  { code: 'AT', label: 'Austria / Österreich (AT)' },
   { code: 'TR', label: 'Türkiye (TR)' },
-  { code: 'DE', label: 'Almanya (DE)' },
-  { code: 'CH', label: 'İsviçre (CH)' },
-  { code: 'GB', label: 'İngiltere (GB)' },
-  { code: 'US', label: 'ABD (US)' },
+  { code: 'DE', label: 'Germany / Deutschland (DE)' },
+  { code: 'CH', label: 'Switzerland / Schweiz (CH)' },
+  { code: 'GB', label: 'United Kingdom (GB)' },
+  { code: 'US', label: 'United States (US)' },
 ];
 
 const QUICK_PRESETS: { label: string; country: NewsCountryCode; primary: string; secondary: string }[] = [
@@ -23,28 +24,28 @@ const QUICK_PRESETS: { label: string; country: NewsCountryCode; primary: string;
   { label: 'Berlin', country: 'DE', primary: 'Berlin', secondary: '' },
 ];
 
-function formatAgeTurkish(hours: number): string {
-  if (hours < 1) {
-    const mins = Math.max(1, Math.round(hours * 60));
-    return `${mins} dk önce`;
-  }
-  if (hours < 24) {
-    return `${Math.round(hours)} saat önce`;
-  }
-  return `${Math.floor(hours / 24)} gün önce`;
-}
-
 interface NewsPageProps {
   settings: AppSettings;
   onUpdateSettings: (patch: Partial<AppSettings>) => Promise<void>;
 }
 
 export const NewsPage: React.FC<NewsPageProps> = ({ settings, onUpdateSettings }) => {
+  const { lang, locale, t } = useI18n();
   const { notify } = useToast();
   const [data, setData] = useState<LocalNewsSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [regionFilter, setRegionFilter] = useState<'all' | 'primary' | 'secondary'>('all');
+
+  const formatAge = (hours: number): string => {
+    if (hours < 1) {
+      return t('news.ageMins', { n: Math.max(1, Math.round(hours * 60)) });
+    }
+    if (hours < 24) {
+      return t('news.ageHours', { n: Math.round(hours) });
+    }
+    return t('news.ageDays', { n: Math.floor(hours / 24) });
+  };
 
   // Dynamic Region Picker state
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -69,7 +70,7 @@ export const NewsPage: React.FC<NewsPageProps> = ({ settings, onUpdateSettings }
       setData(snap);
       setRegionFilter('all');
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Haberler yüklenemedi.', 'error');
+      notify(err instanceof Error ? err.message : t('news.loadError'), 'error');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -127,18 +128,16 @@ export const NewsPage: React.FC<NewsPageProps> = ({ settings, onUpdateSettings }
     ? [data.regionPrimary, data.regionSecondary].filter(Boolean).join(' & ')
     : [settings.newsRegionPrimary, settings.newsRegionSecondary].filter(Boolean).join(' & ') || 'Bölgeniz';
 
-  const isTurkishFeed = (data?.language || (country === 'TR' ? 'tr' : 'de')) === 'tr';
+  const feedLanguage = data?.language || (country === 'TR' ? 'tr' : country === 'GB' || country === 'US' ? 'en' : 'de');
 
   return (
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
           <h1 className="font-display text-2xl font-semibold text-white">
-            {headingRegion} — Son 24 Saat Top 10
+            {headingRegion} — Top 10 (24h)
           </h1>
-          <p className="text-sm text-[#C8B5BC] mt-0.5">
-            Seçtiğiniz ülke ve şehir/bölgedeki yerel kaynaklardan derlenen son 24 saatin en önemli 10 haberi.
-          </p>
+          <p className="text-sm text-[#C8B5BC] mt-0.5">{t('news.subtitle')}</p>
         </div>
 
         <div className="flex flex-wrap gap-2 self-start sm:self-auto">
@@ -147,11 +146,11 @@ export const NewsPage: React.FC<NewsPageProps> = ({ settings, onUpdateSettings }
             className="pv-btn-secondary text-xs"
           >
             <SlidersHorizontal className="w-3.5 h-3.5 text-rose-300" />
-            Bölge Değiştir
+            {lang === 'de' ? 'Region ändern' : lang === 'en' ? 'Change Region' : 'Bölge Değiştir'}
           </button>
           <button onClick={() => loadNews(true)} disabled={refreshing} className="pv-btn-primary text-xs">
             <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-            Haberleri Yenile
+            {t('news.refresh')}
           </button>
         </div>
       </div>
@@ -231,7 +230,7 @@ export const NewsPage: React.FC<NewsPageProps> = ({ settings, onUpdateSettings }
                 : 'bg-white/5 text-[#D7C7CC] hover:bg-white/10 border border-white/10'
             }`}
           >
-            Top 10 Tümü ({data?.items.length || 0})
+            {t('news.filterAll', { count: data?.items.length || 0 })}
           </button>
 
           {data?.regionPrimary && data.regionSecondary && (
@@ -262,24 +261,23 @@ export const NewsPage: React.FC<NewsPageProps> = ({ settings, onUpdateSettings }
 
         {data && (
           <div className="text-xs text-[#A8929A]">
-            Son güncelleme: {new Date(data.updatedAt).toLocaleTimeString('tr-TR')}
+            {t('mkt.lastUpdate', { time: new Date(data.updatedAt).toLocaleTimeString(locale) })}
           </div>
         )}
       </div>
 
       {loading && !data ? (
-        <div className="pv-glass rounded-2xl p-12 text-center text-sm text-[#D7C7CC]">
-          {headingRegion} son 24 saat haberleri derleniyor...
-        </div>
+        <div className="pv-glass rounded-2xl p-12 text-center text-sm text-[#D7C7CC]">{t('news.loading')}</div>
       ) : items.length === 0 ? (
         <div className="pv-glass rounded-2xl p-12 text-center space-y-3">
           <Newspaper className="w-10 h-10 text-rose-400/60 mx-auto" />
-          <div className="text-sm text-[#B8A2AA]">Bu filtrede haber bulunamadı.</div>
+          <div className="text-sm text-[#B8A2AA]">{t('news.empty')}</div>
         </div>
       ) : (
         <div className="space-y-3">
           {items.map((news, idx) => {
-            const translateUrl = `https://translate.google.com/translate?sl=${data?.language || 'auto'}&tl=tr&u=${encodeURIComponent(news.link)}`;
+            const targetLang = lang === 'en' ? 'en' : lang === 'de' ? 'de' : 'tr';
+            const translateUrl = `https://translate.google.com/translate?sl=${feedLanguage}&tl=${targetLang}&u=${encodeURIComponent(news.link)}`;
             return (
               <div
                 key={news.id}
@@ -304,7 +302,7 @@ export const NewsPage: React.FC<NewsPageProps> = ({ settings, onUpdateSettings }
                     <span className="px-2 py-0.5 rounded-full bg-white/8 text-[#E4D5DA]">{news.source}</span>
                     <span className="inline-flex items-center gap-1 text-[#A8929A]">
                       <Clock className="w-3 h-3" />
-                      {formatAgeTurkish(news.ageHours)}
+                      {formatAge(news.ageHours)}
                     </span>
                   </div>
 
@@ -327,19 +325,19 @@ export const NewsPage: React.FC<NewsPageProps> = ({ settings, onUpdateSettings }
                     rel="noreferrer"
                     className="pv-btn-primary text-xs py-1.5 px-3"
                   >
-                    Haberi Aç
+                    {t('news.openArticle')}
                     <ExternalLink className="w-3.5 h-3.5" />
                   </a>
-                  {!isTurkishFeed && (
+                  {feedLanguage !== lang && (
                     <a
                       href={translateUrl}
                       target="_blank"
                       rel="noreferrer"
                       className="pv-btn-secondary text-xs py-1.5 px-3"
-                      title="Google Çeviri ile Türkçe oku"
+                      title={t('news.translateTitle')}
                     >
                       <Languages className="w-3.5 h-3.5 text-rose-300" />
-                      Türkçe Oku
+                      {t('news.translateBtn')}
                     </a>
                   )}
                 </div>

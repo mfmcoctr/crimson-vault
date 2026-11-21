@@ -1,5 +1,6 @@
 import React, { useEffect } from 'react';
 import { X } from 'lucide-react';
+import { useI18n } from '../i18n';
 
 interface ModalProps {
   open: boolean;
@@ -19,6 +20,8 @@ const SIZE_CLASSES: Record<NonNullable<ModalProps['size']>, string> = {
 };
 
 export const Modal: React.FC<ModalProps> = ({ open, onClose, title, subtitle, size = 'md', children }) => {
+  const { t } = useI18n();
+
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
@@ -48,7 +51,7 @@ export const Modal: React.FC<ModalProps> = ({ open, onClose, title, subtitle, si
           <button
             onClick={onClose}
             className="p-1.5 rounded-lg text-[#C8B5BC] hover:text-white hover:bg-white/10 transition-colors cursor-pointer"
-            aria-label="Kapat"
+            aria-label={t('common.close')}
           >
             <X className="w-5 h-5" />
           </button>
@@ -58,4 +61,3 @@ export const Modal: React.FC<ModalProps> = ({ open, onClose, title, subtitle, si
     </div>
   );
 };
-

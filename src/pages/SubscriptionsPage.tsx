@@ -13,22 +13,23 @@ import {
 import { api } from '../api';
 import type { AppSettings, BillingCycle, CurrencyCode, SubscriptionEntry, SubscriptionStatus } from '../types';
 import {
-  BILLING_CYCLE_LABELS,
   convertCurrency,
   formatCurrency,
+  getBillingCycleLabel,
   summarizeSubscriptions,
 } from '../utils/currencyUtils';
 import {
   advanceBillingDate,
   daysBetween,
   formatCountdown,
-  formatTurkishDate,
+  formatLocalizedDate,
   parseIsoDate,
   startOfToday,
   toIsoDate,
 } from '../utils/dateUtils';
 import { Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
+import { useI18n } from '../i18n';
 
 const SUB_CATEGORIES = ['Yazılım / AI', 'Bulut / Hosting', 'Eğlence / Yayın', 'Müzik', 'Domain / Sunucu', 'Yaşam', 'Diğer'];
 
@@ -54,6 +55,7 @@ const emptySub = (defaultCurrency: CurrencyCode): Partial<SubscriptionEntry> => 
 });
 
 export const SubscriptionsPage: React.FC<SubscriptionsPageProps> = ({ subscriptions, settings, onRefresh }) => {
+  const { lang, t, categoryLabel } = useI18n();
   const { notify } = useToast();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | SubscriptionStatus>('active');
@@ -74,10 +76,12 @@ export const SubscriptionsPage: React.FC<SubscriptionsPageProps> = ({ subscripti
       .filter((s) => {
         if (statusFilter !== 'all' && s.status !== statusFilter) return false;
         if (!q) return true;
-        return [s.name, s.category, s.notes, s.paymentMethod].some((f) => f.toLowerCase().includes(q));
+        return [s.name, s.category, categoryLabel(s.category), s.notes, s.paymentMethod].some((f) =>
+          f.toLowerCase().includes(q),
+        );
       })
       .sort((a, b) => a.nextBillingDate.localeCompare(b.nextBillingDate));
-  }, [subscriptions, search, statusFilter]);
+  }, [subscriptions, search, statusFilter, categoryLabel]);
 
   const openCreate = () => {
     setEditing(null);
@@ -94,22 +98,22 @@ export const SubscriptionsPage: React.FC<SubscriptionsPageProps> = ({ subscripti
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name?.trim()) {
-      notify('Abonelik adı zorunludur.', 'error');
+      notify(t('sub.nameRequired'), 'error');
       return;
     }
     setSaving(true);
     try {
       if (editing) {
         await api.updateSubscription(editing.id, form);
-        notify('Abonelik güncellendi.');
+        notify(t('sub.updatedToast'));
       } else {
         await api.createSubscription(form);
-        notify('Abonelik eklendi.');
+        notify(t('sub.createdToast'));
       }
       setModalOpen(false);
       await onRefresh();
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'İşlem başarısız.', 'error');
+      notify(err instanceof Error ? err.message : t('common.opFailed'), 'error');
     } finally {
       setSaving(false);
     }
@@ -118,14 +122,14 @@ export const SubscriptionsPage: React.FC<SubscriptionsPageProps> = ({ subscripti
   const handleAdvancePeriod = async (s: SubscriptionEntry) => {
     const nextDate = advanceBillingDate(s.nextBillingDate, s.billingCycle);
     await api.updateSubscription(s.id, { nextBillingDate: nextDate });
-    notify(`${s.name} sonraki yenileme tarihi ${formatTurkishDate(nextDate)} olarak güncellendi.`);
+    notify(t('sub.advancedToast', { name: s.name, date: formatLocalizedDate(nextDate, lang) }));
     await onRefresh();
   };
 
   const handleDelete = async (s: SubscriptionEntry) => {
-    if (!window.confirm(`"${s.name}" aboneliğini silmek istiyor musunuz?`)) return;
+    if (!window.confirm(t('sub.deleteConfirm', { name: s.name }))) return;
     await api.deleteSubscription(s.id);
-    notify('Abonelik silindi.');
+    notify(t('sub.deletedToast'));
     await onRefresh();
   };
 
@@ -133,14 +137,12 @@ export const SubscriptionsPage: React.FC<SubscriptionsPageProps> = ({ subscripti
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="font-display text-2xl font-semibold text-white">Abonelik Takibi & Gider Özeti</h1>
-          <p className="text-sm text-[#C8B5BC] mt-0.5">
-            Tüm düzenli ödemelerinizi çoklu para birimi desteği ve yenileme uyarılarıyla takip edin.
-          </p>
+          <h1 className="font-display text-2xl font-semibold text-white">{t('sub.title')}</h1>
+          <p className="text-sm text-[#C8B5BC] mt-0.5">{t('sub.subtitle')}</p>
         </div>
         <button onClick={openCreate} className="pv-btn-primary">
           <Plus className="w-4 h-4" />
-          Yeni Abonelik
+          {t('sub.newBtn')}
         </button>
       </div>
 
@@ -148,36 +150,36 @@ export const SubscriptionsPage: React.FC<SubscriptionsPageProps> = ({ subscripti
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4">
         <div className="lg:col-span-7 grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div className="pv-glass-crimson rounded-2xl p-5">
-            <div className="text-xs text-rose-200/80 uppercase tracking-wider">Aylık Tahmini Gider</div>
+            <div className="text-xs text-rose-200/80 uppercase tracking-wider">{t('sub.monthlyEst')}</div>
             <div className="text-3xl font-bold text-white mt-2">
-              {formatCurrency(summary.monthlyTotal, settings.defaultCurrency)}
+              {formatCurrency(summary.monthlyTotal, settings.defaultCurrency, lang)}
             </div>
             <div className="flex flex-wrap gap-1.5 mt-3">
               {Object.entries(summary.byOriginalCurrency).map(([cur, val]) => (
                 <span key={cur} className="text-[11px] px-2 py-0.5 rounded-full bg-black/40 text-rose-100 border border-white/10">
-                  {formatCurrency(val || 0, cur as CurrencyCode)} / ay
+                  {formatCurrency(val || 0, cur as CurrencyCode, lang)} {t('sub.perMonth')}
                 </span>
               ))}
             </div>
           </div>
 
           <div className="pv-glass rounded-2xl p-5">
-            <div className="text-xs text-[#C8B5BC] uppercase tracking-wider">Yıllık Toplam Projeksiyon</div>
+            <div className="text-xs text-[#C8B5BC] uppercase tracking-wider">{t('sub.yearlyProj')}</div>
             <div className="text-3xl font-bold text-white mt-2">
-              {formatCurrency(summary.yearlyTotal, settings.defaultCurrency)}
+              {formatCurrency(summary.yearlyTotal, settings.defaultCurrency, lang)}
             </div>
             <div className="text-xs text-[#B8A2AA] mt-3 flex items-center gap-2">
               <TrendingUp className="w-3.5 h-3.5 text-rose-400" />
-              <span>{summary.activeCount} aktif abonelik · Kurlar Ayarlar'dan düzenlenebilir</span>
+              <span>{t('sub.activeSubsInfo', { count: summary.activeCount })}</span>
             </div>
           </div>
         </div>
 
         {/* Category Breakdown */}
         <div className="lg:col-span-5 pv-glass rounded-2xl p-5">
-          <div className="text-xs text-[#C8B5BC] uppercase tracking-wider mb-3">Kategori Bazlı Aylık Dağılım</div>
+          <div className="text-xs text-[#C8B5BC] uppercase tracking-wider mb-3">{t('sub.categoryBreakdown')}</div>
           {summary.byCategory.length === 0 ? (
-            <div className="text-xs text-[#9C868E] py-4">Henüz aktif abonelik verisi yok.</div>
+            <div className="text-xs text-[#9C868E] py-4">{t('sub.noActiveData')}</div>
           ) : (
             <div className="space-y-2.5">
               {summary.byCategory.slice(0, 4).map((cat) => {
@@ -185,9 +187,9 @@ export const SubscriptionsPage: React.FC<SubscriptionsPageProps> = ({ subscripti
                 return (
                   <div key={cat.category} className="space-y-1">
                     <div className="flex justify-between text-xs">
-                      <span className="text-[#F8F4F5]">{cat.category}</span>
+                      <span className="text-[#F8F4F5]">{categoryLabel(cat.category)}</span>
                       <span className="text-[#D7C7CC]">
-                        {formatCurrency(cat.monthly, settings.defaultCurrency)} ({pct}%)
+                        {formatCurrency(cat.monthly, settings.defaultCurrency, lang)} ({pct}%)
                       </span>
                     </div>
                     <div className="h-1.5 rounded-full bg-white/10 overflow-hidden">
@@ -211,27 +213,27 @@ export const SubscriptionsPage: React.FC<SubscriptionsPageProps> = ({ subscripti
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Abonelik adı, kategori veya ödeme yöntemi ara..."
+            placeholder={t('sub.searchPlaceholder')}
             className="pv-input pl-10"
           />
         </div>
         <div className="flex gap-1.5">
           {[
-            { id: 'active', label: 'Aktif' },
-            { id: 'paused', label: 'Duraklatıldı' },
-            { id: 'cancelled', label: 'İptal' },
-            { id: 'all', label: 'Tümü' },
-          ].map((t) => (
+            { id: 'active', label: t('common.active') },
+            { id: 'paused', label: t('common.paused') },
+            { id: 'cancelled', label: t('common.cancelled') },
+            { id: 'all', label: t('common.all') },
+          ].map((tab) => (
             <button
-              key={t.id}
-              onClick={() => setStatusFilter(t.id as 'all' | SubscriptionStatus)}
+              key={tab.id}
+              onClick={() => setStatusFilter(tab.id as 'all' | SubscriptionStatus)}
               className={`px-3 py-1.5 rounded-xl text-xs font-medium cursor-pointer transition-all ${
-                statusFilter === t.id
+                statusFilter === tab.id
                   ? 'bg-[#9F1239] text-white'
                   : 'bg-white/5 text-[#D7C7CC] hover:bg-white/10 border border-white/10'
               }`}
             >
-              {t.label}
+              {tab.label}
             </button>
           ))}
         </div>
@@ -241,11 +243,11 @@ export const SubscriptionsPage: React.FC<SubscriptionsPageProps> = ({ subscripti
       {filtered.length === 0 ? (
         <div className="pv-glass rounded-2xl p-12 text-center space-y-3">
           <CreditCard className="w-10 h-10 text-rose-400/70 mx-auto" />
-          <div className="text-base font-medium text-white">Abonelik kaydı bulunamadı</div>
-          <p className="text-sm text-[#A8929A]">Netflix, ChatGPT, Hosting veya SaaS aboneliklerinizi ekleyin.</p>
+          <div className="text-base font-medium text-white">{t('sub.emptyTitle')}</div>
+          <p className="text-sm text-[#A8929A]">{t('sub.emptyDesc')}</p>
           <button onClick={openCreate} className="pv-btn-primary">
             <Plus className="w-4 h-4" />
-            İlk Aboneliği Ekle
+            {t('sub.addFirst')}
           </button>
         </div>
       ) : (
@@ -278,7 +280,7 @@ export const SubscriptionsPage: React.FC<SubscriptionsPageProps> = ({ subscripti
                           </a>
                         )}
                       </div>
-                      <span className="text-xs text-[#B8A2AA]">{s.category}</span>
+                      <span className="text-xs text-[#B8A2AA]">{categoryLabel(s.category)}</span>
                     </div>
                     <div className="flex items-center gap-1">
                       <button
@@ -298,24 +300,24 @@ export const SubscriptionsPage: React.FC<SubscriptionsPageProps> = ({ subscripti
 
                   <div className="flex items-baseline justify-between bg-black/45 border border-white/8 rounded-xl px-3.5 py-2.5">
                     <div>
-                      <span className="text-xl font-bold text-white">{formatCurrency(s.price, s.currency)}</span>
-                      <span className="text-xs text-[#B8A2AA] ml-1.5">/ {BILLING_CYCLE_LABELS[s.billingCycle]}</span>
+                      <span className="text-xl font-bold text-white">{formatCurrency(s.price, s.currency, lang)}</span>
+                      <span className="text-xs text-[#B8A2AA] ml-1.5">/ {getBillingCycleLabel(s.billingCycle, lang)}</span>
                     </div>
                     {converted !== null && (
                       <span className="text-xs text-rose-200/90">
-                        ≈ {formatCurrency(converted, settings.defaultCurrency)}
+                        ≈ {formatCurrency(converted, settings.defaultCurrency, lang)}
                       </span>
                     )}
                   </div>
 
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-[#C8B5BC]">Sonraki Yenileme:</span>
-                    <span className="text-white font-medium">{formatTurkishDate(s.nextBillingDate)}</span>
+                    <span className="text-[#C8B5BC]">{t('sub.nextRenewal')}</span>
+                    <span className="text-white font-medium">{formatLocalizedDate(s.nextBillingDate, lang)}</span>
                   </div>
 
                   {s.paymentMethod && (
                     <div className="flex items-center justify-between text-xs">
-                      <span className="text-[#C8B5BC]">Ödeme Yöntemi:</span>
+                      <span className="text-[#C8B5BC]">{t('sub.paymentMethod')}</span>
                       <span className="text-[#E4D5DA]">{s.paymentMethod}</span>
                     </div>
                   )}
@@ -334,20 +336,20 @@ export const SubscriptionsPage: React.FC<SubscriptionsPageProps> = ({ subscripti
                     }`}
                   >
                     {s.status === 'active'
-                      ? formatCountdown(daysUntil)
+                      ? formatCountdown(daysUntil, lang)
                       : s.status === 'paused'
-                        ? 'Duraklatıldı'
-                        : 'İptal Edildi'}
+                        ? t('common.paused')
+                        : t('sub.cancelledLabel')}
                   </span>
 
                   {s.status === 'active' && s.billingCycle !== 'once' && (
                     <button
                       onClick={() => handleAdvancePeriod(s)}
                       className="text-xs inline-flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-white/6 hover:bg-[#9F1239]/40 text-[#F8F4F5] border border-white/10 transition-colors cursor-pointer"
-                      title="Ödemeyi işaretle ve tarihi sonraki döneme taşı"
+                      title={t('sub.markPaidTitle')}
                     >
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-400" />
-                      Ödendi
+                      {t('sub.paidBtn')}
                       <RefreshCw className="w-3 h-3 opacity-70" />
                     </button>
                   )}
@@ -362,23 +364,23 @@ export const SubscriptionsPage: React.FC<SubscriptionsPageProps> = ({ subscripti
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={editing ? 'Aboneliği Düzenle' : 'Yeni Abonelik Ekle'}
+        title={editing ? t('sub.modalEdit') : t('sub.modalCreate')}
         size="lg"
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">Hizmet Adı *</label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('sub.serviceName')}</label>
               <input
                 value={form.name || ''}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="Örn: Spotify, Hetzner VPS, ChatGPT Plus"
+                placeholder={t('sub.serviceNamePlaceholder')}
                 className="pv-input"
                 required
               />
             </div>
             <div>
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">Kategori</label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('common.category')}</label>
               <select
                 value={form.category || 'Yazılım / AI'}
                 onChange={(e) => setForm({ ...form, category: e.target.value })}
@@ -386,7 +388,7 @@ export const SubscriptionsPage: React.FC<SubscriptionsPageProps> = ({ subscripti
               >
                 {SUB_CATEGORIES.map((c) => (
                   <option key={c} value={c}>
-                    {c}
+                    {categoryLabel(c)}
                   </option>
                 ))}
               </select>
@@ -395,7 +397,7 @@ export const SubscriptionsPage: React.FC<SubscriptionsPageProps> = ({ subscripti
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">Tutar *</label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('sub.amount')}</label>
               <input
                 type="number"
                 step="0.01"
@@ -407,7 +409,7 @@ export const SubscriptionsPage: React.FC<SubscriptionsPageProps> = ({ subscripti
               />
             </div>
             <div>
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">Para Birimi</label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('sub.currency')}</label>
               <select
                 value={form.currency || 'TRY'}
                 onChange={(e) => setForm({ ...form, currency: e.target.value as CurrencyCode })}
@@ -420,24 +422,24 @@ export const SubscriptionsPage: React.FC<SubscriptionsPageProps> = ({ subscripti
               </select>
             </div>
             <div>
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">Ödeme Döngüsü</label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('sub.billingCycle')}</label>
               <select
                 value={form.billingCycle || 'monthly'}
                 onChange={(e) => setForm({ ...form, billingCycle: e.target.value as BillingCycle })}
                 className="pv-select w-full"
               >
-                <option value="monthly">Aylık</option>
-                <option value="yearly">Yıllık</option>
-                <option value="quarterly">3 Aylık</option>
-                <option value="weekly">Haftalık</option>
-                <option value="once">Tek Seferlik</option>
+                <option value="monthly">{getBillingCycleLabel('monthly', lang)}</option>
+                <option value="yearly">{getBillingCycleLabel('yearly', lang)}</option>
+                <option value="quarterly">{getBillingCycleLabel('quarterly', lang)}</option>
+                <option value="weekly">{getBillingCycleLabel('weekly', lang)}</option>
+                <option value="once">{getBillingCycleLabel('once', lang)}</option>
               </select>
             </div>
           </div>
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div>
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">Sonraki Ödeme Tarihi</label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('sub.nextBillingDate')}</label>
               <input
                 type="date"
                 value={form.nextBillingDate || ''}
@@ -447,19 +449,19 @@ export const SubscriptionsPage: React.FC<SubscriptionsPageProps> = ({ subscripti
               />
             </div>
             <div>
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">Durum</label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('common.status')}</label>
               <select
                 value={form.status || 'active'}
                 onChange={(e) => setForm({ ...form, status: e.target.value as SubscriptionStatus })}
                 className="pv-select w-full"
               >
-                <option value="active">Aktif</option>
-                <option value="paused">Duraklatıldı</option>
-                <option value="cancelled">İptal</option>
+                <option value="active">{t('common.active')}</option>
+                <option value="paused">{t('common.paused')}</option>
+                <option value="cancelled">{t('common.cancelled')}</option>
               </select>
             </div>
             <div>
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">Kaç Gün Önce Hatırlat?</label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('sub.remindDays')}</label>
               <input
                 type="number"
                 min="0"
@@ -473,16 +475,16 @@ export const SubscriptionsPage: React.FC<SubscriptionsPageProps> = ({ subscripti
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">Ödeme Yöntemi / Kart Notu</label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('sub.paymentMethodLabel')}</label>
               <input
                 value={form.paymentMethod || ''}
                 onChange={(e) => setForm({ ...form, paymentMethod: e.target.value })}
-                placeholder="Örn: Sanal Kart ••4821"
+                placeholder={t('sub.paymentMethodPlaceholder')}
                 className="pv-input"
               />
             </div>
             <div>
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">Yönetim Paneli URL</label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('sub.manageUrl')}</label>
               <input
                 value={form.url || ''}
                 onChange={(e) => setForm({ ...form, url: e.target.value })}
@@ -493,7 +495,7 @@ export const SubscriptionsPage: React.FC<SubscriptionsPageProps> = ({ subscripti
           </div>
 
           <div>
-            <label className="block text-xs text-[#D7C7CC] mb-1.5">Notlar</label>
+            <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('common.notes')}</label>
             <textarea
               rows={2}
               value={form.notes || ''}
@@ -504,10 +506,10 @@ export const SubscriptionsPage: React.FC<SubscriptionsPageProps> = ({ subscripti
 
           <div className="flex justify-end gap-2.5 pt-3 border-t border-white/10">
             <button type="button" onClick={() => setModalOpen(false)} className="pv-btn-secondary">
-              İptal
+              {t('common.cancel')}
             </button>
             <button type="submit" disabled={saving} className="pv-btn-primary">
-              {saving ? 'Kaydediliyor...' : editing ? 'Güncelle' : 'Ekle'}
+              {saving ? t('common.saving') : editing ? t('common.update') : t('common.add')}
             </button>
           </div>
         </form>
@@ -515,4 +517,3 @@ export const SubscriptionsPage: React.FC<SubscriptionsPageProps> = ({ subscripti
     </div>
   );
 };
-

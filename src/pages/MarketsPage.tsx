@@ -14,6 +14,7 @@ import {
 import { api } from '../api';
 import type { AppSettings, MarketsSnapshot } from '../types';
 import { useToast } from '../components/Toast';
+import { useI18n } from '../i18n';
 
 const AVAILABLE_COINS = [
   { id: 'bitcoin', symbol: 'BTC', name: 'Bitcoin' },
@@ -38,16 +39,17 @@ interface MarketsPageProps {
   onUpdateSettings: (patch: Partial<AppSettings>) => Promise<void>;
 }
 
-function fmtMoney(val: number, cur: 'EUR' | 'USD' | 'TRY'): string {
+function fmtMoney(val: number, cur: 'EUR' | 'USD' | 'TRY', locale: string): string {
   const sym = cur === 'EUR' ? '€' : cur === 'USD' ? '$' : '₺';
   const decimals = val > 0 && val < 0.05 ? 6 : val < 5 ? 3 : 2;
-  return `${sym}${new Intl.NumberFormat('tr-TR', {
+  return `${sym}${new Intl.NumberFormat(locale, {
     minimumFractionDigits: decimals,
     maximumFractionDigits: decimals,
   }).format(val)}`;
 }
 
 export const MarketsPage: React.FC<MarketsPageProps> = ({ settings, onUpdateSettings }) => {
+  const { locale, t } = useI18n();
   const { notify } = useToast();
   const [data, setData] = useState<MarketsSnapshot | null>(null);
   const [loading, setLoading] = useState(true);
@@ -67,7 +69,7 @@ export const MarketsPage: React.FC<MarketsPageProps> = ({ settings, onUpdateSett
       const snap = await api.getMarkets(targetCity, force);
       setData(snap);
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Piyasa verileri alınamadı.', 'error');
+      notify(err instanceof Error ? err.message : t('mkt.loadError'), 'error');
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -81,7 +83,7 @@ export const MarketsPage: React.FC<MarketsPageProps> = ({ settings, onUpdateSett
   const toggleCoin = async (coinId: string) => {
     const exists = watchlist.includes(coinId);
     if (exists && watchlist.length <= 1) {
-      notify('En az 1 kripto para takipte kalmalıdır.', 'info');
+      notify(t('mkt.minOneCoin'), 'info');
       return;
     }
     const next = exists ? watchlist.filter((c) => c !== coinId) : [...watchlist, coinId];
@@ -98,7 +100,7 @@ export const MarketsPage: React.FC<MarketsPageProps> = ({ settings, onUpdateSett
         GBP: Number((data.fx.eurToTry / data.fx.eurToGbp).toFixed(2)),
       },
     });
-    notify('Canlı ECB döviz kurları abonelik gider hesaplayıcısına aktarıldı!');
+    notify(t('mkt.fxSynced'));
   };
 
   return (
@@ -106,10 +108,8 @@ export const MarketsPage: React.FC<MarketsPageProps> = ({ settings, onUpdateSett
       {/* Header */}
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="font-display text-2xl font-semibold text-white">Piyasalar, Altın & Yakıt</h1>
-          <p className="text-sm text-[#C8B5BC] mt-0.5">
-            Canlı Kripto (BTC, ETH...), Altın/Gümüş, ECB Döviz ve Avusturya E-Control resmi Hallein/Salzburg yakıt fiyatları.
-          </p>
+          <h1 className="font-display text-2xl font-semibold text-white">{t('mkt.title')}</h1>
+          <p className="text-sm text-[#C8B5BC] mt-0.5">{t('mkt.subtitle')}</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -127,13 +127,9 @@ export const MarketsPage: React.FC<MarketsPageProps> = ({ settings, onUpdateSett
             ))}
           </div>
 
-          <button
-            onClick={() => loadMarkets(city, true)}
-            disabled={refreshing}
-            className="pv-btn-primary text-xs"
-          >
+          <button onClick={() => loadMarkets(city, true)} disabled={refreshing} className="pv-btn-primary text-xs">
             <RefreshCw className={`w-3.5 h-3.5 ${refreshing ? 'animate-spin' : ''}`} />
-            Canlı Yenile
+            {t('mkt.refresh')}
           </button>
         </div>
       </div>
@@ -145,9 +141,7 @@ export const MarketsPage: React.FC<MarketsPageProps> = ({ settings, onUpdateSett
       )}
 
       {loading && !data ? (
-        <div className="pv-glass rounded-2xl p-12 text-center text-sm text-[#D7C7CC]">
-          Canlı piyasa ve E-Control yakıt verileri çekiliyor...
-        </div>
+        <div className="pv-glass rounded-2xl p-12 text-center text-sm text-[#D7C7CC]">{t('mkt.loading')}</div>
       ) : data ? (
         <>
           {/* SECTION 1: CRYPTO WATCHLIST */}
@@ -155,14 +149,11 @@ export const MarketsPage: React.FC<MarketsPageProps> = ({ settings, onUpdateSett
             <div className="flex items-center justify-between">
               <h2 className="text-base font-semibold text-white flex items-center gap-2">
                 <TrendingUp className="w-4 h-4 text-rose-400" />
-                Kripto Takip Listesi
+                {t('mkt.cryptoWatchlist')}
               </h2>
-              <button
-                onClick={() => setPickerOpen((o) => !o)}
-                className="pv-btn-secondary text-xs py-1.5"
-              >
+              <button onClick={() => setPickerOpen((o) => !o)} className="pv-btn-secondary text-xs py-1.5">
                 <Plus className="w-3.5 h-3.5 text-rose-300" />
-                Coin Ekle / Çıkar
+                {t('mkt.addRemoveCoin')}
               </button>
             </div>
 
@@ -192,7 +183,7 @@ export const MarketsPage: React.FC<MarketsPageProps> = ({ settings, onUpdateSett
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-3.5">
               {data.crypto.map((c) => {
                 const primary = cur === 'EUR' ? c.eur : cur === 'USD' ? c.usd : c.try;
-                const secondary = cur === 'EUR' ? fmtMoney(c.usd, 'USD') : fmtMoney(c.eur, 'EUR');
+                const secondary = cur === 'EUR' ? fmtMoney(c.usd, 'USD', locale) : fmtMoney(c.eur, 'EUR', locale);
                 const positive = c.change24h >= 0;
                 return (
                   <div
@@ -217,10 +208,10 @@ export const MarketsPage: React.FC<MarketsPageProps> = ({ settings, onUpdateSett
                     </div>
                     <div>
                       <div className="text-xl font-bold text-white font-mono-code">
-                        {fmtMoney(primary, cur)}
+                        {fmtMoney(primary, cur, locale)}
                       </div>
                       <div className="text-[11px] text-[#B8A2AA] font-mono-code mt-0.5">
-                        {secondary} · {fmtMoney(c.try, 'TRY')}
+                        {secondary} · {fmtMoney(c.try, 'TRY', locale)}
                       </div>
                     </div>
                   </div>
@@ -235,52 +226,52 @@ export const MarketsPage: React.FC<MarketsPageProps> = ({ settings, onUpdateSett
               <div className="flex items-center justify-between">
                 <h2 className="text-base font-semibold text-white flex items-center gap-2">
                   <Coins className="w-4 h-4 text-amber-300" />
-                  Altın & Gümüş
+                  {t('mkt.goldSilver')}
                 </h2>
-                <span className="text-[11px] text-rose-200/80">Canlı Spot Fiyatlar</span>
+                <span className="text-[11px] text-rose-200/80">{t('mkt.liveSpot')}</span>
               </div>
 
               {data.metals ? (
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                   <div className="rounded-xl bg-black/45 border border-amber-400/25 p-3.5">
-                    <div className="text-[11px] text-amber-200/90 uppercase tracking-wider">Gram Altın</div>
+                    <div className="text-[11px] text-amber-200/90 uppercase tracking-wider">{t('mkt.gramGold')}</div>
                     <div className="text-xl font-bold text-white font-mono-code mt-1.5">
-                      {fmtMoney(data.metals.goldGramEur, 'EUR')}
+                      {fmtMoney(data.metals.goldGramEur, 'EUR', locale)}
                     </div>
                     <div className="text-xs text-[#D7C7CC] font-mono-code mt-0.5">
-                      {fmtMoney(data.metals.goldGramTry, 'TRY')}
+                      {fmtMoney(data.metals.goldGramTry, 'TRY', locale)}
                     </div>
                   </div>
 
                   <div className="rounded-xl bg-black/45 border border-white/10 p-3.5">
-                    <div className="text-[11px] text-[#C8B5BC] uppercase tracking-wider">Ons Altın (XAU)</div>
+                    <div className="text-[11px] text-[#C8B5BC] uppercase tracking-wider">{t('mkt.ounceGold')}</div>
                     <div className="text-xl font-bold text-white font-mono-code mt-1.5">
-                      {fmtMoney(data.metals.goldOunceUsd, 'USD')}
+                      {fmtMoney(data.metals.goldOunceUsd, 'USD', locale)}
                     </div>
                     <div className="text-xs text-[#D7C7CC] font-mono-code mt-0.5">
-                      {fmtMoney(data.metals.goldOunceEur, 'EUR')}
+                      {fmtMoney(data.metals.goldOunceEur, 'EUR', locale)}
                     </div>
                   </div>
 
                   <div className="rounded-xl bg-black/45 border border-white/10 p-3.5">
-                    <div className="text-[11px] text-[#C8B5BC] uppercase tracking-wider">Gram Gümüş (XAG)</div>
+                    <div className="text-[11px] text-[#C8B5BC] uppercase tracking-wider">{t('mkt.gramSilver')}</div>
                     <div className="text-xl font-bold text-white font-mono-code mt-1.5">
-                      {fmtMoney(data.metals.silverGramEur, 'EUR')}
+                      {fmtMoney(data.metals.silverGramEur, 'EUR', locale)}
                     </div>
                     <div className="text-xs text-[#D7C7CC] font-mono-code mt-0.5">
-                      {fmtMoney(data.metals.silverGramTry, 'TRY')}
+                      {fmtMoney(data.metals.silverGramTry, 'TRY', locale)}
                     </div>
                   </div>
                 </div>
               ) : (
-                <div className="text-xs text-[#B8A2AA]">Altın verisi alınamadı.</div>
+                <div className="text-xs text-[#B8A2AA]">{t('mkt.noGoldData')}</div>
               )}
             </div>
 
             <div className="lg:col-span-5 pv-glass rounded-2xl p-5 flex flex-col justify-between gap-4">
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <h2 className="text-base font-semibold text-white">Döviz Kurları (ECB)</h2>
+                  <h2 className="text-base font-semibold text-white">{t('mkt.fxRates')}</h2>
                   {data.fx && <span className="text-[11px] text-[#9C868E]">{data.fx.date}</span>}
                 </div>
                 {data.fx ? (
@@ -305,13 +296,13 @@ export const MarketsPage: React.FC<MarketsPageProps> = ({ settings, onUpdateSett
                     </div>
                   </div>
                 ) : (
-                  <div className="text-xs text-[#B8A2AA]">Döviz verisi alınamadı.</div>
+                  <div className="text-xs text-[#B8A2AA]">{t('mkt.noFxData')}</div>
                 )}
               </div>
 
               {data.fx && (
                 <button onClick={handleSyncFxToSubscriptions} className="pv-btn-secondary text-xs w-full">
-                  Bu Canlı Kurları Abonelik Hesabına Aktar
+                  {t('mkt.syncFxBtn')}
                 </button>
               )}
             </div>
@@ -323,11 +314,9 @@ export const MarketsPage: React.FC<MarketsPageProps> = ({ settings, onUpdateSett
               <div>
                 <h2 className="text-base font-semibold text-white flex items-center gap-2">
                   <Fuel className="w-4 h-4 text-rose-400" />
-                  Canlı Benzin & Dizel Fiyatları — {data.fuel.cityLabel}
+                  {t('mkt.fuelHeader', { city: data.fuel.cityLabel })}
                 </h2>
-                <p className="text-xs text-[#B8A2AA] mt-0.5">
-                  Avusturya Resmi E-Control Spritpreisrechner verisi (En ucuz 5 açık istasyon)
-                </p>
+                <p className="text-xs text-[#B8A2AA] mt-0.5">{t('mkt.fuelSub')}</p>
               </div>
               <div className="flex flex-wrap gap-1 rounded-xl bg-black/45 border border-white/10 p-1 text-xs">
                 {[
@@ -354,13 +343,13 @@ export const MarketsPage: React.FC<MarketsPageProps> = ({ settings, onUpdateSett
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
               {[
                 {
-                  title: 'Super 95 (Benzin)',
+                  title: t('mkt.super95'),
                   accent: 'text-emerald-300',
                   badge: 'bg-emerald-500/20 text-emerald-200 border-emerald-400/35',
                   block: data.fuel.super95,
                 },
                 {
-                  title: 'Diesel (Dizel)',
+                  title: t('mkt.diesel'),
                   accent: 'text-amber-300',
                   badge: 'bg-amber-500/20 text-amber-200 border-amber-400/35',
                   block: data.fuel.diesel,
@@ -372,13 +361,13 @@ export const MarketsPage: React.FC<MarketsPageProps> = ({ settings, onUpdateSett
                       <h3 className="font-semibold text-white">{fuelCol.title}</h3>
                       {fuelCol.block.average && (
                         <span className="text-xs text-[#B8A2AA]">
-                          Bölge ortalaması: €{fuelCol.block.average.toFixed(3)} / L
+                          {t('mkt.regionAvg', { price: fuelCol.block.average.toFixed(3) })}
                         </span>
                       )}
                     </div>
                     {fuelCol.block.cheapest && (
                       <div className="text-right">
-                        <div className="text-[10px] uppercase tracking-wider text-[#B8A2AA]">En Ucuz</div>
+                        <div className="text-[10px] uppercase tracking-wider text-[#B8A2AA]">{t('mkt.cheapest')}</div>
                         <div className={`text-2xl font-bold font-mono-code ${fuelCol.accent}`}>
                           €{fuelCol.block.cheapest.toFixed(3)}
                         </div>
@@ -387,7 +376,7 @@ export const MarketsPage: React.FC<MarketsPageProps> = ({ settings, onUpdateSett
                   </div>
 
                   {fuelCol.block.stations.length === 0 ? (
-                    <div className="text-xs text-[#9C868E] py-4">Açık istasyon verisi bulunamadı.</div>
+                    <div className="text-xs text-[#9C868E] py-4">{t('mkt.noStations')}</div>
                   ) : (
                     <div className="space-y-2">
                       {fuelCol.block.stations.map((st, idx) => (
@@ -428,7 +417,7 @@ export const MarketsPage: React.FC<MarketsPageProps> = ({ settings, onUpdateSett
           </div>
 
           <div className="text-[11px] text-[#9C868E] text-right">
-            Son güncelleme: {new Date(data.updatedAt).toLocaleTimeString('tr-TR')}
+            {t('mkt.lastUpdate', { time: new Date(data.updatedAt).toLocaleTimeString(locale) })}
           </div>
         </>
       ) : null}

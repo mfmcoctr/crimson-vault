@@ -1,21 +1,58 @@
-import type { BillingCycle, CalendarEventEntry, SubscriptionEntry } from '../types';
+import type { AppLanguage, BillingCycle, CalendarEventEntry, SubscriptionEntry } from '../types';
 
-export const TR_MONTHS = [
-  'Ocak',
-  'Şubat',
-  'Mart',
-  'Nisan',
-  'Mayıs',
-  'Haziran',
-  'Temmuz',
-  'Ağustos',
-  'Eylül',
-  'Ekim',
-  'Kasım',
-  'Aralık',
-];
+export const MONTHS_BY_LANG: Record<AppLanguage, string[]> = {
+  tr: [
+    'Ocak',
+    'Şubat',
+    'Mart',
+    'Nisan',
+    'Mayıs',
+    'Haziran',
+    'Temmuz',
+    'Ağustos',
+    'Eylül',
+    'Ekim',
+    'Kasım',
+    'Aralık',
+  ],
+  en: [
+    'January',
+    'February',
+    'March',
+    'April',
+    'May',
+    'June',
+    'July',
+    'August',
+    'September',
+    'October',
+    'November',
+    'December',
+  ],
+  de: [
+    'Jänner',
+    'Februar',
+    'März',
+    'April',
+    'Mai',
+    'Juni',
+    'Juli',
+    'August',
+    'September',
+    'Oktober',
+    'November',
+    'Dezember',
+  ],
+};
 
-export const TR_DAYS_SHORT = ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'];
+export const DAYS_SHORT_BY_LANG: Record<AppLanguage, string[]> = {
+  tr: ['Pzt', 'Sal', 'Çar', 'Per', 'Cum', 'Cmt', 'Paz'],
+  en: ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'],
+  de: ['Mo', 'Di', 'Mi', 'Do', 'Fr', 'Sa', 'So'],
+};
+
+export const TR_MONTHS = MONTHS_BY_LANG.tr;
+export const TR_DAYS_SHORT = DAYS_SHORT_BY_LANG.tr;
 
 export function toIsoDate(d: Date): string {
   const y = d.getFullYear();
@@ -83,16 +120,39 @@ export function computeNextOccurrence(event: CalendarEventEntry, reference = sta
   };
 }
 
-export function formatCountdown(daysUntil: number): string {
+export function formatCountdown(daysUntil: number, lang: AppLanguage = 'tr'): string {
+  if (lang === 'en') {
+    if (daysUntil === 0) return 'Today!';
+    if (daysUntil === 1) return 'Tomorrow';
+    if (daysUntil < 0) return `${Math.abs(daysUntil)}d ago`;
+    return `${daysUntil}d left`;
+  }
+  if (lang === 'de') {
+    if (daysUntil === 0) return 'Heute!';
+    if (daysUntil === 1) return 'Morgen';
+    if (daysUntil < 0) return `vor ${Math.abs(daysUntil)} Tagen`;
+    return `in ${daysUntil} Tagen`;
+  }
   if (daysUntil === 0) return 'Bugün!';
   if (daysUntil === 1) return 'Yarın';
   if (daysUntil < 0) return `${Math.abs(daysUntil)} gün önce`;
   return `${daysUntil} gün kaldı`;
 }
 
-export function formatTurkishDate(iso: string): string {
+export function formatLocalizedDate(iso: string, lang: AppLanguage = 'tr'): string {
   const d = parseIsoDate(iso);
-  return `${d.getDate()} ${TR_MONTHS[d.getMonth()]} ${d.getFullYear()}`;
+  const months = MONTHS_BY_LANG[lang] || MONTHS_BY_LANG.tr;
+  if (lang === 'en') {
+    return `${months[d.getMonth()]} ${d.getDate()}, ${d.getFullYear()}`;
+  }
+  if (lang === 'de') {
+    return `${d.getDate()}. ${months[d.getMonth()]} ${d.getFullYear()}`;
+  }
+  return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+}
+
+export function formatTurkishDate(iso: string, lang: AppLanguage = 'tr'): string {
+  return formatLocalizedDate(iso, lang);
 }
 
 export function advanceBillingDate(isoDate: string, cycle: BillingCycle): string {
@@ -128,6 +188,7 @@ export interface ActiveReminderAlert {
 export function collectActiveReminders(
   events: CalendarEventEntry[],
   subscriptions: SubscriptionEntry[],
+  lang: AppLanguage = 'tr',
 ): ActiveReminderAlert[] {
   const today = startOfToday();
   const alerts: ActiveReminderAlert[] = [];
@@ -136,12 +197,18 @@ export function collectActiveReminders(
     const occ = computeNextOccurrence(ev, today);
     const windowDays = Math.max(0, ev.remindDaysBefore ?? 3);
     if (occ.daysUntil >= 0 && occ.daysUntil <= windowDays) {
-      const ageText = occ.turningAge ? ` (${occ.turningAge}. yaş)` : '';
+      const ageText = occ.turningAge
+        ? lang === 'en'
+          ? ` (Age ${occ.turningAge})`
+          : lang === 'de'
+            ? ` (${occ.turningAge}. Geburtstag)`
+            : ` (${occ.turningAge}. yaş)`
+        : '';
       alerts.push({
         id: `ev-${ev.id}`,
         source: 'event',
         title: `${ev.title}${ageText}`,
-        subtitle: `${formatTurkishDate(occ.nextIso)} · ${formatCountdown(occ.daysUntil)}`,
+        subtitle: `${formatLocalizedDate(occ.nextIso, lang)} · ${formatCountdown(occ.daysUntil, lang)}`,
         dateIso: occ.nextIso,
         daysUntil: occ.daysUntil,
         urgent: occ.daysUntil <= 1,
@@ -155,11 +222,17 @@ export function collectActiveReminders(
     const diff = daysBetween(today, due);
     const windowDays = Math.max(0, sub.remindDaysBefore ?? 3);
     if (diff >= -1 && diff <= windowDays) {
+      const renewalTitle =
+        lang === 'en'
+          ? `${sub.name} Renewal`
+          : lang === 'de'
+            ? `${sub.name} Verlängerung`
+            : `${sub.name} Yenilemesi`;
       alerts.push({
         id: `sub-${sub.id}`,
         source: 'subscription',
-        title: `${sub.name} Yenilemesi`,
-        subtitle: `${sub.price} ${sub.currency} · ${formatCountdown(diff)}`,
+        title: renewalTitle,
+        subtitle: `${sub.price} ${sub.currency} · ${formatCountdown(diff, lang)}`,
         dateIso: sub.nextBillingDate,
         daysUntil: diff,
         urgent: diff <= 1,
@@ -169,4 +242,3 @@ export function collectActiveReminders(
 
   return alerts.sort((a, b) => a.daysUntil - b.daysUntil);
 }
-

@@ -19,6 +19,7 @@ import type { CurrencyCode, StoreName, TrackedProduct } from '../types';
 import { formatCurrency } from '../utils/currencyUtils';
 import { Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
+import { useI18n } from '../i18n';
 
 const STORES: StoreName[] = ['Amazon', 'Temu', 'AliExpress', 'MediaMarkt', 'Geizhals', 'Diğer'];
 
@@ -84,6 +85,7 @@ const emptyDeal = (): Partial<TrackedProduct> => ({
 });
 
 export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
+  const { lang, t, storeLabel } = useI18n();
   const { notify } = useToast();
   const [search, setSearch] = useState('');
   const [storeFilter, setStoreFilter] = useState<'all' | 'alerts' | StoreName>('all');
@@ -119,9 +121,9 @@ export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
       }
       if (storeFilter !== 'all' && storeFilter !== 'alerts' && d.store !== storeFilter) return false;
       if (!q) return true;
-      return [d.name, d.store, d.notes, d.url].some((f) => f.toLowerCase().includes(q));
+      return [d.name, d.store, storeLabel(d.store), d.notes, d.url].some((f) => f.toLowerCase().includes(q));
     });
-  }, [deals, search, storeFilter]);
+  }, [deals, search, storeFilter, storeLabel]);
 
   const openCreate = () => {
     setEditing(null);
@@ -139,7 +141,7 @@ export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
 
   const handleInspectUrl = async () => {
     if (!form.url?.trim()) {
-      notify('Önce ürün linkini yapıştırın.', 'info');
+      notify(t('deals.pasteUrlFirst'), 'info');
       return;
     }
     setInspectingUrl(true);
@@ -160,7 +162,7 @@ export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
       }));
       setInspectNote(res.message);
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Link incelenemedi.', 'error');
+      notify(err instanceof Error ? err.message : t('deals.inspectFailed'), 'error');
     } finally {
       setInspectingUrl(false);
     }
@@ -169,22 +171,22 @@ export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.name?.trim()) {
-      notify('Ürün adı zorunludur.', 'error');
+      notify(t('deals.nameRequired'), 'error');
       return;
     }
     setSaving(true);
     try {
       if (editing) {
         await api.updateDeal(editing.id, form);
-        notify('Ürün takibi güncellendi.');
+        notify(t('deals.updatedToast'));
       } else {
         await api.createDeal(form);
-        notify('Ürün indirim takibine eklendi.');
+        notify(t('deals.createdToast'));
       }
       setModalOpen(false);
       await onRefresh();
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Kaydedilemedi.', 'error');
+      notify(err instanceof Error ? err.message : t('common.saveFailed'), 'error');
     } finally {
       setSaving(false);
     }
@@ -196,12 +198,12 @@ export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
       const updated = await api.checkDealPrice(d.id);
       await onRefresh();
       if (updated.lastCheckStatus === 'ok') {
-        notify(`${updated.name}: ${formatCurrency(updated.currentPrice, updated.currency)}`);
+        notify(`${updated.name}: ${formatCurrency(updated.currentPrice, updated.currency, lang)}`);
       } else {
         notify(updated.lastCheckMessage, 'info');
       }
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Kontrol edilemedi.', 'error');
+      notify(err instanceof Error ? err.message : t('deals.checkFailed'), 'error');
     } finally {
       setCheckingId(null);
     }
@@ -222,7 +224,7 @@ export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
     }
     await onRefresh();
     setCheckingAll(false);
-    notify(`${withUrls.length} ürün kontrol edildi (${okCount} otomatik fiyat güncellendi).`);
+    notify(t('deals.checkedAllToast', { total: withUrls.length, ok: okCount }));
   };
 
   const handleQuickPriceSubmit = async (e: React.FormEvent) => {
@@ -230,28 +232,35 @@ export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
     if (!quickPriceItem) return;
     const val = Number(quickPriceValue.replace(',', '.'));
     if (!Number.isFinite(val) || val <= 0) {
-      notify('Geçerli bir fiyat girin.', 'error');
+      notify(t('deals.invalidPrice'), 'error');
       return;
     }
     await api.updateDeal(quickPriceItem.id, {
       currentPrice: val,
       lastCheckStatus: 'manual',
-      lastCheckMessage: `Manuel güncellendi: ${formatCurrency(val, quickPriceItem.currency)}`,
+      lastCheckMessage: t('deals.manualUpdatedMsg', {
+        price: formatCurrency(val, quickPriceItem.currency, lang),
+      }),
     });
     setQuickPriceItem(null);
     setQuickPriceValue('');
     await onRefresh();
     if (quickPriceItem.targetPrice > 0 && val <= quickPriceItem.targetPrice) {
-      notify(`🎯 ${quickPriceItem.name} hedef fiyatınıza (${formatCurrency(quickPriceItem.targetPrice, quickPriceItem.currency)}) ulaştı!`);
+      notify(
+        t('deals.hitTargetToast', {
+          name: quickPriceItem.name,
+          price: formatCurrency(quickPriceItem.targetPrice, quickPriceItem.currency, lang),
+        }),
+      );
     } else {
-      notify('Yeni fiyat geçmişe kaydedildi.');
+      notify(t('deals.priceLoggedToast'));
     }
   };
 
   const handleDelete = async (d: TrackedProduct) => {
-    if (!window.confirm(`"${d.name}" ürününü takipten çıkarmak istiyor musunuz?`)) return;
+    if (!window.confirm(t('deals.deleteConfirm', { name: d.name }))) return;
     await api.deleteDeal(d.id);
-    notify('Ürün takipten çıkarıldı.');
+    notify(t('deals.deletedToast'));
     await onRefresh();
   };
 
@@ -260,21 +269,19 @@ export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="font-display text-2xl font-semibold text-white">Favori Ürün & İndirim Takibi</h1>
-          <p className="text-sm text-[#C8B5BC] mt-0.5">
-            Amazon, Temu, AliExpress, MediaMarkt ve Geizhals favorilerinizi hedef fiyat alarmları ve fiyat geçmişiyle takip edin.
-          </p>
+          <h1 className="font-display text-2xl font-semibold text-white">{t('deals.title')}</h1>
+          <p className="text-sm text-[#C8B5BC] mt-0.5">{t('deals.subtitle')}</p>
         </div>
         <div className="flex flex-wrap gap-2">
           {deals.length > 0 && (
             <button onClick={handleCheckAll} disabled={checkingAll} className="pv-btn-secondary text-xs">
               <RefreshCw className={`w-3.5 h-3.5 text-rose-300 ${checkingAll ? 'animate-spin' : ''}`} />
-              {checkingAll ? 'Kontrol Ediliyor...' : 'Tümünü Kontrol Et'}
+              {checkingAll ? t('deals.checking') : t('deals.checkAll')}
             </button>
           )}
           <button onClick={openCreate} className="pv-btn-primary">
             <Plus className="w-4 h-4" />
-            Ürün Ekle
+            {t('deals.addProduct')}
           </button>
         </div>
       </div>
@@ -283,7 +290,7 @@ export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
       <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
         <div className="pv-glass rounded-2xl p-4 flex items-center justify-between">
           <div>
-            <div className="text-xs text-[#C8B5BC]">Takip Edilen Ürün</div>
+            <div className="text-xs text-[#C8B5BC]">{t('deals.trackedCount')}</div>
             <div className="text-2xl font-bold text-white mt-1">{deals.length}</div>
           </div>
           <ShoppingBag className="w-8 h-8 text-rose-400/75" />
@@ -293,14 +300,14 @@ export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
           className="pv-glass-crimson rounded-2xl p-4 flex items-center justify-between text-left cursor-pointer"
         >
           <div>
-            <div className="text-xs text-rose-200">Hedef Fiyata Ulaşanlar</div>
+            <div className="text-xs text-rose-200">{t('deals.targetReached')}</div>
             <div className="text-2xl font-bold text-white mt-1">{targetHits.length}</div>
           </div>
           <BellRing className="w-8 h-8 text-emerald-300" />
         </button>
         <div className="pv-glass rounded-2xl p-4 flex items-center justify-between">
           <div>
-            <div className="text-xs text-[#C8B5BC]">İlk Fiyattan İndirimde</div>
+            <div className="text-xs text-[#C8B5BC]">{t('deals.discounted')}</div>
             <div className="text-2xl font-bold text-emerald-300 mt-1">{discounted.length}</div>
           </div>
           <TrendingDown className="w-8 h-8 text-emerald-400/80" />
@@ -314,15 +321,15 @@ export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Ürün adı, mağaza veya not ara..."
+            placeholder={t('deals.searchPlaceholder')}
             className="pv-input pl-10"
           />
         </div>
         <div className="flex flex-wrap gap-1.5">
           {[
-            { id: 'all' as const, label: `Tümü (${deals.length})` },
-            { id: 'alerts' as const, label: `🎯 Hedefe Ulaşan (${targetHits.length})` },
-            ...STORES.map((s) => ({ id: s, label: s })),
+            { id: 'all' as const, label: t('deals.allPill', { count: deals.length }) },
+            { id: 'alerts' as const, label: t('deals.alertsPill', { count: targetHits.length }) },
+            ...STORES.map((s) => ({ id: s, label: storeLabel(s) })),
           ].map((f) => (
             <button
               key={f.id}
@@ -343,13 +350,11 @@ export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
       {filtered.length === 0 ? (
         <div className="pv-glass rounded-2xl p-12 text-center space-y-3">
           <Tag className="w-10 h-10 text-rose-400/70 mx-auto" />
-          <div className="text-base font-medium text-white">Henüz takip edilen ürün yok</div>
-          <p className="text-sm text-[#A8929A] max-w-lg mx-auto">
-            Amazon, Temu veya AliExpress favori ürününüzün linkini yapıştırıp hedef indirim fiyatınızı belirleyin; fiyat düştüğünde üst bildirim zilinde anında uyarı alın.
-          </p>
+          <div className="text-base font-medium text-white">{t('deals.emptyTitle')}</div>
+          <p className="text-sm text-[#A8929A] max-w-lg mx-auto">{t('deals.emptyDesc')}</p>
           <button onClick={openCreate} className="pv-btn-primary">
             <Plus className="w-4 h-4" />
-            İlk Ürünü Takibe Al
+            {t('deals.addFirst')}
           </button>
         </div>
       ) : (
@@ -391,17 +396,17 @@ export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
                     <div className="flex-1 min-w-0">
                       <div className="flex flex-wrap items-center gap-1.5">
                         <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${STORE_BADGE[d.store]}`}>
-                          {d.store}
+                          {storeLabel(d.store)}
                         </span>
                         {hitTarget && (
                           <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/25 text-emerald-200 border border-emerald-400/45 font-semibold inline-flex items-center gap-1">
                             <CheckCircle2 className="w-3 h-3" />
-                            Hedef Fiyatta!
+                            {t('deals.atTargetBadge')}
                           </span>
                         )}
                         {discountPct > 0 && (
                           <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 font-semibold">
-                            -%{discountPct}
+                            {lang === 'tr' ? `-%${discountPct}` : `-${discountPct}%`}
                           </span>
                         )}
                       </div>
@@ -427,26 +432,27 @@ export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
                   {/* Price Row + Sparkline */}
                   <div className="flex items-center justify-between gap-3 rounded-xl bg-black/45 border border-white/8 px-3.5 py-3">
                     <div>
-                      <div className="text-[10px] uppercase tracking-wider text-[#A8929A]">Güncel Fiyat</div>
+                      <div className="text-[10px] uppercase tracking-wider text-[#A8929A]">{t('deals.currentPrice')}</div>
                       <div className="flex items-baseline gap-2">
                         <span className="text-xl font-bold text-white font-mono-code">
-                          {formatCurrency(d.currentPrice, d.currency)}
+                          {formatCurrency(d.currentPrice, d.currency, lang)}
                         </span>
                         {d.originalPrice > d.currentPrice && (
                           <span className="text-xs text-[#9C868E] line-through font-mono-code">
-                            {formatCurrency(d.originalPrice, d.currency)}
+                            {formatCurrency(d.originalPrice, d.currency, lang)}
                           </span>
                         )}
                       </div>
                       <div className="text-xs text-rose-200/90 mt-0.5">
-                        Hedef Alarm: <strong className="font-mono-code">{formatCurrency(d.targetPrice, d.currency)}</strong>
+                        {t('deals.targetAlarm')}{' '}
+                        <strong className="font-mono-code">{formatCurrency(d.targetPrice, d.currency, lang)}</strong>
                       </div>
                     </div>
 
                     <div className="flex flex-col items-end">
                       <MiniSparkline points={d.priceHistory || []} />
                       <span className="text-[10px] text-[#9C868E] mt-1">
-                        {(d.priceHistory || []).length} fiyat kaydı
+                        {t('deals.pricePoints', { count: (d.priceHistory || []).length })}
                       </span>
                     </div>
                   </div>
@@ -468,7 +474,7 @@ export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
                         className="pv-btn-secondary text-xs py-1.5 px-2.5"
                       >
                         <RefreshCw className={`w-3.5 h-3.5 text-rose-300 ${checkingId === d.id ? 'animate-spin' : ''}`} />
-                        Kontrol Et
+                        {t('deals.checkSingle')}
                       </button>
                     )}
                     <button
@@ -478,7 +484,7 @@ export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
                       }}
                       className="pv-btn-secondary text-xs py-1.5 px-2.5"
                     >
-                      Hızlı Fiyat Gir
+                      {t('deals.quickPrice')}
                     </button>
                   </div>
 
@@ -489,7 +495,7 @@ export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
                         target="_blank"
                         rel="noreferrer"
                         className="text-[11px] px-2.5 py-1.5 rounded-lg bg-amber-500/15 hover:bg-amber-500/25 text-amber-200 border border-amber-400/30 inline-flex items-center gap-1"
-                        title="Keepa ile Amazon.de tam fiyat geçmişi grafiğini aç"
+                        title={t('deals.keepaTitle')}
                       >
                         <LineChart className="w-3 h-3" />
                         Keepa
@@ -500,7 +506,7 @@ export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
                       target="_blank"
                       rel="noreferrer"
                       className="text-[11px] px-2.5 py-1.5 rounded-lg bg-sky-500/15 hover:bg-sky-500/25 text-sky-200 border border-sky-400/30"
-                      title="Avusturya Geizhals'ta en ucuz fiyatı karşılaştır"
+                      title={t('deals.geizhalsTitle')}
                     >
                       Geizhals.at
                     </a>
@@ -511,7 +517,7 @@ export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
                         rel="noreferrer"
                         className="pv-btn-primary text-xs py-1.5 px-2.5"
                       >
-                        Ürüne Git
+                        {t('deals.goToProduct')}
                         <ExternalLink className="w-3 h-3" />
                       </a>
                     )}
@@ -527,13 +533,13 @@ export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={editing ? 'Ürünü Düzenle' : 'Favori Ürün / İndirim Takibi Ekle'}
-        subtitle="Ürün linkini yapıştırıp bilgileri otomatik çekmeyi deneyebilir veya elle girebilirsiniz"
+        title={editing ? t('deals.modalEdit') : t('deals.modalCreate')}
+        subtitle={t('deals.modalSubtitle')}
         size="lg"
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div>
-            <label className="block text-xs text-[#D7C7CC] mb-1.5">Ürün Linki (Amazon, Temu, AliExpress, Geizhals...)</label>
+            <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('deals.urlLabel')}</label>
             <div className="flex gap-2">
               <input
                 value={form.url || ''}
@@ -548,7 +554,7 @@ export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
                 className="pv-btn-secondary text-xs shrink-0"
               >
                 <Sparkles className="w-3.5 h-3.5 text-rose-300" />
-                {inspectingUrl ? 'Okunuyor...' : 'Bilgileri Çek'}
+                {inspectingUrl ? t('deals.reading') : t('deals.fetchInfo')}
               </button>
             </div>
             {inspectNote && <p className="text-[11px] text-rose-200 mt-1.5">{inspectNote}</p>}
@@ -556,17 +562,17 @@ export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
 
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
             <div className="sm:col-span-2">
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">Ürün Adı *</label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('deals.nameLabel')}</label>
               <input
                 value={form.name || ''}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
-                placeholder="Örn: Sony WH-1000XM5 Kulaklık"
+                placeholder={t('deals.namePlaceholder')}
                 className="pv-input"
                 required
               />
             </div>
             <div>
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">Mağaza</label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('deals.storeLabel')}</label>
               <select
                 value={form.store || 'Amazon'}
                 onChange={(e) => setForm({ ...form, store: e.target.value as StoreName })}
@@ -574,7 +580,7 @@ export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
               >
                 {STORES.map((s) => (
                   <option key={s} value={s}>
-                    {s}
+                    {storeLabel(s)}
                   </option>
                 ))}
               </select>
@@ -583,7 +589,7 @@ export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
 
           <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
             <div>
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">Güncel Fiyat</label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('deals.currentPrice')}</label>
               <input
                 type="number"
                 step="0.01"
@@ -594,7 +600,7 @@ export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
               />
             </div>
             <div>
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">İlk / Liste Fiyatı</label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('deals.originalPrice')}</label>
               <input
                 type="number"
                 step="0.01"
@@ -605,7 +611,7 @@ export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
               />
             </div>
             <div>
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">Hedef İndirim Fiyatı</label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('deals.targetPrice')}</label>
               <input
                 type="number"
                 step="0.01"
@@ -616,7 +622,7 @@ export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
               />
             </div>
             <div>
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">Para Birimi</label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('sub.currency')}</label>
               <select
                 value={form.currency || 'EUR'}
                 onChange={(e) => setForm({ ...form, currency: e.target.value as CurrencyCode })}
@@ -631,7 +637,7 @@ export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
           </div>
 
           <div>
-            <label className="block text-xs text-[#D7C7CC] mb-1.5">Notlar (Beden, renk, kupon kodu...)</label>
+            <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('deals.notesLabel')}</label>
             <textarea
               rows={2}
               value={form.notes || ''}
@@ -642,10 +648,10 @@ export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
 
           <div className="flex justify-end gap-2.5 pt-2 border-t border-white/10">
             <button type="button" onClick={() => setModalOpen(false)} className="pv-btn-secondary">
-              İptal
+              {t('common.cancel')}
             </button>
             <button type="submit" disabled={saving} className="pv-btn-primary">
-              {saving ? 'Kaydediliyor...' : editing ? 'Güncelle' : 'Takibe Ekle'}
+              {saving ? t('common.saving') : editing ? t('common.update') : t('deals.addToTrack')}
             </button>
           </div>
         </form>
@@ -655,14 +661,14 @@ export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
       <Modal
         open={Boolean(quickPriceItem)}
         onClose={() => setQuickPriceItem(null)}
-        title="Hızlı Güncel Fiyat Gir"
+        title={t('deals.quickModalTitle')}
         subtitle={quickPriceItem?.name}
         size="sm"
       >
         <form onSubmit={handleQuickPriceSubmit} className="space-y-4">
           <div>
             <label className="block text-xs text-[#D7C7CC] mb-1.5">
-              Yeni Gördüğünüz Fiyat ({quickPriceItem?.currency})
+              {t('deals.quickPriceLabel', { currency: quickPriceItem?.currency || 'EUR' })}
             </label>
             <input
               type="text"
@@ -675,10 +681,10 @@ export const DealsPage: React.FC<DealsPageProps> = ({ deals, onRefresh }) => {
           </div>
           <div className="flex justify-end gap-2">
             <button type="button" onClick={() => setQuickPriceItem(null)} className="pv-btn-secondary">
-              İptal
+              {t('common.cancel')}
             </button>
             <button type="submit" className="pv-btn-primary">
-              Fiyatı Kaydet
+              {t('deals.savePrice')}
             </button>
           </div>
         </form>

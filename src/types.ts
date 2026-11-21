@@ -245,10 +245,12 @@ export interface LocalNewsSnapshot {
   last24hCount: number;
 }
 
+export type AppLanguage = 'tr' | 'en' | 'de';
 export type BackgroundMode = 'default' | 'custom' | 'folder';
 export type BackgroundFit = 'cover' | 'contain';
 
 export interface AppSettings {
+  language: AppLanguage;
   defaultCurrency: CurrencyCode;
   exchangeRates: Record<CurrencyCode, number>;
   cryptoWatchlist: string[];
@@ -359,6 +361,7 @@ export interface GlobalSearchResult {
 }
 
 export const DEFAULT_SETTINGS: AppSettings = {
+  language: 'tr',
   defaultCurrency: 'TRY',
   exchangeRates: {
     TRY: 1,

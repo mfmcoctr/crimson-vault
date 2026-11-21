@@ -1,4 +1,4 @@
-import type { PasswordEntry } from '../types';
+import type { AppLanguage, PasswordEntry } from '../types';
 
 export interface GeneratorOptions {
   mode: 'random' | 'passphrase';
@@ -28,14 +28,32 @@ export const DEFAULT_GENERATOR_OPTIONS: GeneratorOptions = {
   includeNumber: true,
 };
 
-const PASSPHRASE_WORDS = [
-  'kizil', 'golge', 'hisar', 'kale', 'yildiz', 'yakut', 'gece', 'ayna', 'ates', 'ruzgar',
-  'demir', 'gumus', 'zeytin', 'kartal', 'kuzgun', 'firtina', 'volkan', 'sancak', 'muhur', 'kasa',
-  'kalkan', 'hanedan', 'simya', 'kristal', 'buzul', 'ormanci', 'okyanus', 'bulut', 'safir', 'mercan',
-  'pusula', 'fener', 'zirve', 'vadi', 'nehir', 'toprak', 'gunes', 'hilal', 'sovalye', 'ejder',
-  'kivilcim', 'serap', 'destan', 'efsane', 'gecit', 'kule', 'liman', 'atlas', 'kuvars', 'elmas',
-  'ankara', 'izmir', 'efes', 'truva', 'kapadokya', 'bogaz', 'toros', 'uludag', 'nemrut', 'gokyuzu',
-];
+const PASSPHRASE_WORDS_BY_LANG: Record<AppLanguage, string[]> = {
+  tr: [
+    'kizil', 'golge', 'hisar', 'kale', 'yildiz', 'yakut', 'gece', 'ayna', 'ates', 'ruzgar',
+    'demir', 'gumus', 'zeytin', 'kartal', 'kuzgun', 'firtina', 'volkan', 'sancak', 'muhur', 'kasa',
+    'kalkan', 'hanedan', 'simya', 'kristal', 'buzul', 'ormanci', 'okyanus', 'bulut', 'safir', 'mercan',
+    'pusula', 'fener', 'zirve', 'vadi', 'nehir', 'toprak', 'gunes', 'hilal', 'sovalye', 'ejder',
+    'kivilcim', 'serap', 'destan', 'efsane', 'gecit', 'kule', 'liman', 'atlas', 'kuvars', 'elmas',
+    'ankara', 'izmir', 'efes', 'truva', 'kapadokya', 'bogaz', 'toros', 'uludag', 'nemrut', 'gokyuzu',
+  ],
+  en: [
+    'crimson', 'shadow', 'citadel', 'castle', 'starlight', 'ruby', 'midnight', 'mirror', 'ember', 'tempest',
+    'iron', 'silver', 'olive', 'falcon', 'raven', 'storm', 'volcano', 'banner', 'seal', 'vault',
+    'shield', 'dynasty', 'alchemy', 'crystal', 'glacier', 'ranger', 'ocean', 'cloud', 'sapphire', 'coral',
+    'compass', 'beacon', 'summit', 'valley', 'river', 'terra', 'solar', 'crescent', 'knight', 'dragon',
+    'spark', 'mirage', 'legend', 'mythic', 'pass', 'tower', 'harbor', 'atlas', 'quartz', 'diamond',
+    'obsidian', 'phantom', 'eclipse', 'nebula', 'horizon', 'aurora', 'thunder', 'canyon', 'granite', 'velvet',
+  ],
+  de: [
+    'karmin', 'schatten', 'festung', 'burg', 'stern', 'rubin', 'nacht', 'spiegel', 'glut', 'sturm',
+    'eisen', 'silber', 'olive', 'falke', 'rabe', 'gewitter', 'vulkan', 'banner', 'siegel', 'tresor',
+    'schild', 'krone', 'alchemie', 'kristall', 'gletscher', 'wald', 'ozean', 'wolke', 'saphir', 'koralle',
+    'kompass', 'leucht', 'gipfel', 'tal', 'fluss', 'erde', 'sonne', 'mond', 'ritter', 'drache',
+    'funke', 'fata', 'legende', 'mythos', 'pass', 'turm', 'hafen', 'atlas', 'quarz', 'diamant',
+    'salzburg', 'alpen', 'donau', 'hallein', 'nebel', 'donner', 'granit', 'samt', 'horizont', 'nordlicht',
+  ],
+};
 
 function secureRandomInt(max: number): number {
   const arr = new Uint32Array(1);
@@ -48,11 +66,12 @@ function secureRandomInt(max: number): number {
   return v % max;
 }
 
-export function generatePassword(opts: GeneratorOptions): string {
+export function generatePassword(opts: GeneratorOptions, lang: AppLanguage = 'tr'): string {
   if (opts.mode === 'passphrase') {
+    const wordList = PASSPHRASE_WORDS_BY_LANG[lang] || PASSPHRASE_WORDS_BY_LANG.tr;
     const words: string[] = [];
     for (let i = 0; i < opts.wordCount; i++) {
-      let w = PASSPHRASE_WORDS[secureRandomInt(PASSPHRASE_WORDS.length)];
+      let w = wordList[secureRandomInt(wordList.length)];
       if (opts.capitalizeWords) w = w.charAt(0).toUpperCase() + w.slice(1);
       words.push(w);
     }
@@ -105,9 +124,37 @@ export interface StrengthInfo {
   textColor: string;
 }
 
-export function evaluatePasswordStrength(password: string): StrengthInfo {
+const STRENGTH_LABELS: Record<AppLanguage, Record<'empty' | StrengthInfo['level'], string>> = {
+  tr: {
+    empty: 'Boş',
+    'very-weak': 'Çok Zayıf',
+    weak: 'Zayıf',
+    medium: 'Orta',
+    strong: 'Güçlü',
+    excellent: 'Çok Güçlü',
+  },
+  en: {
+    empty: 'Empty',
+    'very-weak': 'Very Weak',
+    weak: 'Weak',
+    medium: 'Medium',
+    strong: 'Strong',
+    excellent: 'Very Strong',
+  },
+  de: {
+    empty: 'Leer',
+    'very-weak': 'Sehr schwach',
+    weak: 'Schwach',
+    medium: 'Mittel',
+    strong: 'Stark',
+    excellent: 'Sehr stark',
+  },
+};
+
+export function evaluatePasswordStrength(password: string, lang: AppLanguage = 'tr'): StrengthInfo {
+  const labels = STRENGTH_LABELS[lang] || STRENGTH_LABELS.tr;
   if (!password) {
-    return { score: 0, label: 'Boş', level: 'very-weak', barColor: 'bg-zinc-600', textColor: 'text-zinc-400' };
+    return { score: 0, label: labels.empty, level: 'very-weak', barColor: 'bg-zinc-600', textColor: 'text-zinc-400' };
   }
   let poolSize = 0;
   if (/[a-z]/.test(password)) poolSize += 26;
@@ -120,22 +167,22 @@ export function evaluatePasswordStrength(password: string): StrengthInfo {
 
   // Penalize very common patterns or short lengths
   if (password.length < 8) score = Math.min(score, 32);
-  if (/^(123456|password|qwerty|admin|sifre|parola|111111)/i.test(password)) score = Math.min(score, 15);
+  if (/^(123456|password|passwort|qwerty|admin|sifre|parola|111111)/i.test(password)) score = Math.min(score, 15);
   if (/(.)\1{3,}/.test(password)) score = Math.max(10, score - 15);
 
   if (score < 28) {
-    return { score, label: 'Çok Zayıf', level: 'very-weak', barColor: 'bg-red-600', textColor: 'text-red-400' };
+    return { score, label: labels['very-weak'], level: 'very-weak', barColor: 'bg-red-600', textColor: 'text-red-400' };
   }
   if (score < 50) {
-    return { score, label: 'Zayıf', level: 'weak', barColor: 'bg-orange-500', textColor: 'text-orange-300' };
+    return { score, label: labels.weak, level: 'weak', barColor: 'bg-orange-500', textColor: 'text-orange-300' };
   }
   if (score < 72) {
-    return { score, label: 'Orta', level: 'medium', barColor: 'bg-amber-400', textColor: 'text-amber-200' };
+    return { score, label: labels.medium, level: 'medium', barColor: 'bg-amber-400', textColor: 'text-amber-200' };
   }
   if (score < 88) {
-    return { score, label: 'Güçlü', level: 'strong', barColor: 'bg-emerald-500', textColor: 'text-emerald-300' };
+    return { score, label: labels.strong, level: 'strong', barColor: 'bg-emerald-500', textColor: 'text-emerald-300' };
   }
-  return { score, label: 'Çok Güçlü', level: 'excellent', barColor: 'bg-rose-400', textColor: 'text-rose-200' };
+  return { score, label: labels.excellent, level: 'excellent', barColor: 'bg-rose-400', textColor: 'text-rose-200' };
 }
 
 export interface VaultSecurityAudit {
@@ -179,4 +226,3 @@ export function auditPasswords(passwords: PasswordEntry[]): VaultSecurityAudit {
 
   return { healthScore, weakIds, reusedIds, reusedGroups };
 }
-

@@ -1,12 +1,10 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   AlertCircle,
-  Archive,
   ArrowLeft,
   Briefcase,
   Check,
   Copy,
-  Database,
   Download,
   ExternalLink,
   Eye,
@@ -24,9 +22,7 @@ import {
   Plus,
   Search,
   Server,
-  Shield,
   Sparkles,
-  Terminal,
   Trash2,
   Upload,
 } from 'lucide-react';
@@ -43,6 +39,7 @@ import type {
 import { Modal } from '../components/Modal';
 import { PasswordGeneratorModal } from '../components/PasswordGeneratorModal';
 import { useToast } from '../components/Toast';
+import { useI18n, type TranslationKey } from '../i18n';
 
 interface ClientsPageProps {
   clients: ClientVault[];
@@ -51,25 +48,25 @@ interface ClientsPageProps {
   initialClientId?: string | null;
 }
 
-const CRED_TYPE_META: Record<ClientCredentialType, { label: string; badge: string }> = {
-  admin: { label: 'Admin Panel', badge: 'bg-rose-500/25 text-rose-200 border-rose-500/40' },
-  hosting: { label: 'Hosting / cPanel', badge: 'bg-amber-500/20 text-amber-200 border-amber-400/35' },
-  ftp: { label: 'FTP / SFTP', badge: 'bg-sky-500/20 text-sky-200 border-sky-400/35' },
-  ssh: { label: 'SSH / Sunucu', badge: 'bg-purple-500/25 text-purple-200 border-purple-400/35' },
-  database: { label: 'Veritabanı', badge: 'bg-emerald-500/20 text-emerald-200 border-emerald-400/35' },
-  domain: { label: 'Domain / DNS', badge: 'bg-indigo-500/25 text-indigo-200 border-indigo-400/35' },
-  api: { label: 'API Anahtarı', badge: 'bg-pink-500/25 text-pink-200 border-pink-400/35' },
-  smtp: { label: 'SMTP / Mail', badge: 'bg-teal-500/20 text-teal-200 border-teal-400/35' },
-  other: { label: 'Diğer', badge: 'bg-white/10 text-[#D7C7CC] border-white/15' },
+const CRED_TYPE_META: Record<ClientCredentialType, { labelKey: TranslationKey; badge: string }> = {
+  admin: { labelKey: 'cli.credType.admin', badge: 'bg-rose-500/25 text-rose-200 border-rose-500/40' },
+  hosting: { labelKey: 'cli.credType.hosting', badge: 'bg-amber-500/20 text-amber-200 border-amber-400/35' },
+  ftp: { labelKey: 'cli.credType.ftp', badge: 'bg-sky-500/20 text-sky-200 border-sky-400/35' },
+  ssh: { labelKey: 'cli.credType.ssh', badge: 'bg-purple-500/25 text-purple-200 border-purple-400/35' },
+  database: { labelKey: 'cli.credType.database', badge: 'bg-emerald-500/20 text-emerald-200 border-emerald-400/35' },
+  domain: { labelKey: 'cli.credType.domain', badge: 'bg-indigo-500/25 text-indigo-200 border-indigo-400/35' },
+  api: { labelKey: 'cli.credType.api', badge: 'bg-pink-500/25 text-pink-200 border-pink-400/35' },
+  smtp: { labelKey: 'cli.credType.smtp', badge: 'bg-teal-500/20 text-teal-200 border-teal-400/35' },
+  other: { labelKey: 'cli.credType.other', badge: 'bg-white/10 text-[#D7C7CC] border-white/15' },
 };
 
-const FILE_CATEGORY_LABELS: Record<string, string> = {
-  'ssh-key': 'SSH Anahtarı',
-  'ssl-cert': 'SSL Sertifikası',
-  env: '.env Yapılandırma',
-  config: 'Config / JSON',
-  'archive-file': 'Arşiv Dosyası',
-  other: 'Şifreli Ek',
+const FILE_CATEGORY_KEYS: Record<string, TranslationKey> = {
+  'ssh-key': 'cli.fileCat.ssh-key',
+  'ssl-cert': 'cli.fileCat.ssl-cert',
+  env: 'cli.fileCat.env',
+  config: 'cli.fileCat.config',
+  'archive-file': 'cli.fileCat.archive-file',
+  other: 'cli.fileCat.other',
 };
 
 function formatBytes(bytes: number): string {
@@ -84,6 +81,7 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
   clipboardClearSeconds,
   initialClientId,
 }) => {
+  const { t } = useI18n();
   const { notify, copySecret } = useToast();
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<'all' | ClientStatus>('all');
@@ -155,6 +153,11 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
   const archiveInputRef = useRef<HTMLInputElement>(null);
   const directFileInputRef = useRef<HTMLInputElement>(null);
 
+  const fileCategoryLabel = (cat: string) => {
+    const key = FILE_CATEGORY_KEYS[cat];
+    return key ? t(key) : t('cli.statFiles');
+  };
+
   useEffect(() => {
     if (initialClientId) setActiveClientId(initialClientId);
   }, [initialClientId]);
@@ -165,7 +168,7 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
       const data = await api.getClientDetail(id);
       setDetail(data);
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Müşteri kasası yüklenemedi.', 'error');
+      notify(err instanceof Error ? err.message : t('cli.loadError'), 'error');
       setActiveClientId(null);
     } finally {
       setDetailLoading(false);
@@ -221,16 +224,16 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
       ...clientForm,
       tags: clientTagsText
         .split(',')
-        .map((t) => t.trim())
+        .map((x) => x.trim())
         .filter(Boolean),
     };
     if (editingClient) {
       await api.updateClient(editingClient.id, payload);
-      notify('Müşteri bilgileri güncellendi.');
+      notify(t('cli.clientUpdated'));
       if (activeClientId === editingClient.id) await loadClientDetail(editingClient.id);
     } else {
       const created = await api.createClient(payload);
-      notify(`"${created.name}" müşteri kasası oluşturuldu.`);
+      notify(t('cli.clientCreated', { name: created.name }));
       setActiveClientId(created.id);
     }
     setClientModalOpen(false);
@@ -238,15 +241,11 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
   };
 
   const handleDeleteClient = async (c: ClientVault) => {
-    if (
-      !window.confirm(
-        `"${c.name}" müşteri kasasını ve içindeki TÜM şifre, not ve şifreli dosyaları kalıcı olarak silmek istediğinize emin misiniz?`,
-      )
-    ) {
+    if (!window.confirm(t('cli.deleteClientConfirm', { name: c.name }))) {
       return;
     }
     await api.deleteClient(c.id);
-    notify('Müşteri kasası silindi.');
+    notify(t('cli.clientDeleted'));
     if (activeClientId === c.id) setActiveClientId(null);
     await onRefresh();
   };
@@ -278,10 +277,10 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
     if (!activeClientId || !credForm.title?.trim()) return;
     if (editingCred) {
       await api.updateClientCredential(activeClientId, editingCred.id, credForm);
-      notify('Erişim bilgisi güncellendi.');
+      notify(t('cli.credUpdated'));
     } else {
       await api.createClientCredential(activeClientId, credForm);
-      notify('Erişim bilgisi müşteri kasasına eklendi.');
+      notify(t('cli.credCreated'));
     }
     setCredModalOpen(false);
     await loadClientDetail(activeClientId);
@@ -290,9 +289,9 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
 
   const handleDeleteCred = async (c: ClientCredential) => {
     if (!activeClientId) return;
-    if (!window.confirm(`"${c.title}" erişimini silmek istiyor musunuz?`)) return;
+    if (!window.confirm(t('cli.deleteCredConfirm', { title: c.title }))) return;
     await api.deleteClientCredential(activeClientId, c.id);
-    notify('Erişim kaydı silindi.');
+    notify(t('cli.credDeleted'));
     await loadClientDetail(activeClientId);
     await onRefresh();
   };
@@ -315,10 +314,10 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
     if (!activeClientId) return;
     if (editingNote) {
       await api.updateClientNote(activeClientId, editingNote.id, noteForm);
-      notify('Müşteri notu güncellendi.');
+      notify(t('cli.noteUpdated'));
     } else {
       await api.createClientNote(activeClientId, noteForm);
-      notify('Müşteri notu eklendi.');
+      notify(t('cli.noteCreated'));
     }
     setNoteModalOpen(false);
     await loadClientDetail(activeClientId);
@@ -327,9 +326,9 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
 
   const handleDeleteNote = async (n: ClientNote) => {
     if (!activeClientId) return;
-    if (!window.confirm(`"${n.title}" notunu silmek istiyor musunuz?`)) return;
+    if (!window.confirm(t('cli.deleteNoteConfirm', { title: n.title }))) return;
     await api.deleteClientNote(activeClientId, n.id);
-    notify('Müşteri notu silindi.');
+    notify(t('cli.noteDeleted'));
     await loadClientDetail(activeClientId);
     await onRefresh();
   };
@@ -339,11 +338,11 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
     if (!activeClientId || !e.target.files?.length) return;
     try {
       await api.uploadClientFiles(activeClientId, Array.from(e.target.files));
-      notify(`${e.target.files.length} dosya AES-256-GCM ile şifrelenerek eklendi.`);
+      notify(t('cli.filesUploaded', { count: e.target.files.length }));
       await loadClientDetail(activeClientId);
       await onRefresh();
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Dosya yüklenemedi.', 'error');
+      notify(err instanceof Error ? err.message : t('cli.fileUploadError'), 'error');
     } finally {
       e.target.value = '';
     }
@@ -355,15 +354,15 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
       const res = await api.previewClientFile(activeClientId, f.id);
       setPreviewModal({ filename: res.meta.filename, text: res.text });
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Önizlenemedi.', 'error');
+      notify(err instanceof Error ? err.message : t('cli.previewError'), 'error');
     }
   };
 
   const handleDeleteFile = async (f: ClientFileMeta) => {
     if (!activeClientId) return;
-    if (!window.confirm(`"${f.filename}" şifreli dosyasını silmek istiyor musunuz?`)) return;
+    if (!window.confirm(t('cli.deleteFileConfirm', { name: f.filename }))) return;
     await api.deleteClientFile(activeClientId, f.id);
-    notify('Şifreli dosya silindi.');
+    notify(t('cli.fileDeleted'));
     await loadClientDetail(activeClientId);
     await onRefresh();
   };
@@ -400,7 +399,7 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
         setNeedsZipPassword(true);
         setZipPasswordError(err.message);
       } else {
-        notify(err instanceof Error ? err.message : 'Arşiv okunamadı.', 'error');
+        notify(err instanceof Error ? err.message : t('cli.archiveReadError'), 'error');
       }
     } finally {
       setParsingArchive(false);
@@ -418,7 +417,7 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
   const handleCommitImport = async () => {
     if (!previewData) return;
     if (importTargetClientId === '__new__' && !newClientName.trim()) {
-      notify('Lütfen yeni müşteri adını girin.', 'error');
+      notify(t('cli.newClientNameRequired'), 'error');
       return;
     }
     setCommittingImport(true);
@@ -435,14 +434,19 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
         selectedFileIds: Array.from(selectedFileIds),
       });
       notify(
-        `"${res.clientName}" kasasına ${res.importedCredentials} şifre, ${res.importedNotes} not ve ${res.importedFiles} şifreli dosya aktarıldı!`,
+        t('cli.importSuccess', {
+          name: res.clientName,
+          creds: res.importedCredentials,
+          notes: res.importedNotes,
+          files: res.importedFiles,
+        }),
       );
       setImportOpen(false);
       await onRefresh();
       setActiveClientId(res.clientId);
       await loadClientDetail(res.clientId);
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'İçe aktarma başarısız.', 'error');
+      notify(err instanceof Error ? err.message : t('cli.importFailed'), 'error');
     } finally {
       setCommittingImport(false);
     }
@@ -457,18 +461,14 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `${detail.client.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-kasa.zip`;
+      a.download = `${detail.client.name.toLowerCase().replace(/[^a-z0-9]+/g, '-')}-vault.zip`;
       a.click();
       URL.revokeObjectURL(url);
       setExportZipOpen(false);
       setExportZipPassword('');
-      notify(
-        exportZipPassword
-          ? 'Müşteri kasası AES-256 parola korumalı ZIP olarak dışa aktarıldı.'
-          : 'Müşteri kasası ZIP olarak indirildi.',
-      );
+      notify(exportZipPassword ? t('cli.exportEncryptedSuccess') : t('cli.exportPlainSuccess'));
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Dışa aktarılamadı.', 'error');
+      notify(err instanceof Error ? err.message : t('cli.exportError'), 'error');
     } finally {
       setExportingZip(false);
     }
@@ -504,21 +504,21 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
             className="inline-flex items-center gap-2 text-sm text-rose-200 hover:text-white cursor-pointer"
           >
             <ArrowLeft className="w-4 h-4" />
-            Tüm Müşteri Kasalarına Dön
+            {t('cli.backToAll')}
           </button>
 
           <div className="flex flex-wrap gap-2">
             <button onClick={() => openImportModal(c.id)} className="pv-btn-primary text-xs">
               <FileArchive className="w-4 h-4" />
-              Bu Müşteriye ZIP / Arşiv Yükle
+              {t('cli.uploadToClient')}
             </button>
             <button onClick={() => setExportZipOpen(true)} className="pv-btn-secondary text-xs">
               <Download className="w-4 h-4 text-rose-300" />
-              Şifreli ZIP Dışa Aktar
+              {t('cli.exportZip')}
             </button>
             <button onClick={() => openEditClient(c)} className="pv-btn-secondary text-xs">
               <Pencil className="w-3.5 h-3.5" />
-              Düzenle
+              {t('common.edit')}
             </button>
             <button onClick={() => handleDeleteClient(c)} className="pv-btn-danger text-xs">
               <Trash2 className="w-3.5 h-3.5" />
@@ -532,7 +532,11 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
             <div className="flex flex-wrap items-center gap-2.5">
               <h1 className="font-display text-2xl font-semibold text-white">{c.name}</h1>
               <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-black/45 border border-rose-400/35 text-rose-100">
-                {c.status === 'active' ? 'Aktif Proje' : c.status === 'maintenance' ? 'Bakımda' : 'Arşiv'}
+                {c.status === 'active'
+                  ? t('cli.statusActiveProj')
+                  : c.status === 'maintenance'
+                    ? t('cli.statusMaintenance')
+                    : t('cli.statusArchived')}
               </span>
             </div>
             <div className="flex flex-wrap items-center gap-4 text-xs text-[#E4D5DA]">
@@ -562,15 +566,15 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
           <div className="flex gap-3 shrink-0">
             <div className="px-4 py-2.5 rounded-xl bg-black/40 border border-white/10 text-center">
               <div className="text-lg font-bold text-white">{detail.credentials.length}</div>
-              <div className="text-[11px] text-[#C8B5BC]">Erişim</div>
+              <div className="text-[11px] text-[#C8B5BC]">{t('cli.statAccess')}</div>
             </div>
             <div className="px-4 py-2.5 rounded-xl bg-black/40 border border-white/10 text-center">
               <div className="text-lg font-bold text-white">{detail.notes.length}</div>
-              <div className="text-[11px] text-[#C8B5BC]">Not / .env</div>
+              <div className="text-[11px] text-[#C8B5BC]">{t('cli.statNotes')}</div>
             </div>
             <div className="px-4 py-2.5 rounded-xl bg-black/40 border border-white/10 text-center">
               <div className="text-lg font-bold text-white">{detail.files.length}</div>
-              <div className="text-[11px] text-[#C8B5BC]">Şifreli Dosya</div>
+              <div className="text-[11px] text-[#C8B5BC]">{t('cli.statFiles')}</div>
             </div>
           </div>
         </div>
@@ -579,19 +583,19 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="flex gap-1.5 p-1 rounded-xl pv-glass">
             {[
-              { id: 'credentials', label: `Erişim Bilgileri (${detail.credentials.length})`, icon: <KeyRound className="w-4 h-4" /> },
-              { id: 'notes', label: `Notlar & .env (${detail.notes.length})`, icon: <FileCode2 className="w-4 h-4" /> },
-              { id: 'files', label: `Şifreli Dosyalar (${detail.files.length})`, icon: <FileKey2 className="w-4 h-4" /> },
-            ].map((t) => (
+              { id: 'credentials', label: t('cli.tabCredentials', { count: detail.credentials.length }), icon: <KeyRound className="w-4 h-4" /> },
+              { id: 'notes', label: t('cli.tabNotes', { count: detail.notes.length }), icon: <FileCode2 className="w-4 h-4" /> },
+              { id: 'files', label: t('cli.tabFiles', { count: detail.files.length }), icon: <FileKey2 className="w-4 h-4" /> },
+            ].map((tab) => (
               <button
-                key={t.id}
-                onClick={() => setActiveTab(t.id as 'credentials' | 'notes' | 'files')}
+                key={tab.id}
+                onClick={() => setActiveTab(tab.id as 'credentials' | 'notes' | 'files')}
                 className={`px-3.5 py-2 rounded-lg text-xs sm:text-sm font-medium inline-flex items-center gap-2 transition-all cursor-pointer ${
-                  activeTab === t.id ? 'bg-[#9F1239] text-white' : 'text-[#D7C7CC] hover:text-white'
+                  activeTab === tab.id ? 'bg-[#9F1239] text-white' : 'text-[#D7C7CC] hover:text-white'
                 }`}
               >
-                {t.icon}
-                {t.label}
+                {tab.icon}
+                {tab.label}
               </button>
             ))}
           </div>
@@ -599,13 +603,13 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
           {activeTab === 'credentials' && (
             <button onClick={openCreateCred} className="pv-btn-primary text-xs">
               <Plus className="w-4 h-4" />
-              Erişim Bilgisi Ekle
+              {t('cli.addCred')}
             </button>
           )}
           {activeTab === 'notes' && (
             <button onClick={openCreateNote} className="pv-btn-primary text-xs">
               <Plus className="w-4 h-4" />
-              Not / .env Ekle
+              {t('cli.addNote')}
             </button>
           )}
           {activeTab === 'files' && (
@@ -619,7 +623,7 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
               />
               <button onClick={() => directFileInputRef.current?.click()} className="pv-btn-primary text-xs">
                 <Upload className="w-4 h-4" />
-                Şifreli Dosya Yükle (.pem, .crt, .env...)
+                {t('cli.uploadFiles')}
               </button>
             </>
           )}
@@ -634,7 +638,7 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
                 <input
                   value={credSearch}
                   onChange={(e) => setCredSearch(e.target.value)}
-                  placeholder="Panel, sunucu, kullanıcı veya not içinde ara..."
+                  placeholder={t('cli.credSearchPlaceholder')}
                   className="pv-input pl-9 py-2 text-xs"
                 />
               </div>
@@ -645,7 +649,7 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
                     credFilter === 'all' ? 'bg-[#9F1239] text-white' : 'bg-white/5 text-[#D7C7CC]'
                   }`}
                 >
-                  Tümü
+                  {t('common.all')}
                 </button>
                 {(Object.keys(CRED_TYPE_META) as ClientCredentialType[]).map((type) => (
                   <button
@@ -655,7 +659,7 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
                       credFilter === type ? 'bg-[#9F1239] text-white' : 'bg-white/5 text-[#D7C7CC] hover:bg-white/10'
                     }`}
                   >
-                    {CRED_TYPE_META[type].label}
+                    {t(CRED_TYPE_META[type].labelKey)}
                   </button>
                 ))}
               </div>
@@ -664,15 +668,13 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
             {filteredCredentials.length === 0 ? (
               <div className="pv-glass rounded-2xl p-10 text-center space-y-3">
                 <Server className="w-9 h-9 text-rose-400/60 mx-auto" />
-                <div className="text-sm text-[#B8A2AA]">
-                  Bu müşteriye ait erişim kaydı bulunmuyor. Manuel ekleyin veya ZIP arşivi yükleyin.
-                </div>
+                <div className="text-sm text-[#B8A2AA]">{t('cli.noCreds')}</div>
                 <div className="flex justify-center gap-2">
                   <button onClick={openCreateCred} className="pv-btn-secondary text-xs">
-                    Manuel Ekle
+                    {t('cli.manualAdd')}
                   </button>
                   <button onClick={() => openImportModal(c.id)} className="pv-btn-primary text-xs">
-                    ZIP / CSV Yükle
+                    {t('cli.uploadZipCsv')}
                   </button>
                 </div>
               </div>
@@ -682,12 +684,15 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
                   const revealed = revealedIds.has(cred.id);
                   const meta = CRED_TYPE_META[cred.credentialType] || CRED_TYPE_META.other;
                   return (
-                    <div key={cred.id} className="pv-glass rounded-2xl p-4 space-y-3 hover:border-rose-500/35 transition-all">
+                    <div
+                      key={cred.id}
+                      className="pv-glass rounded-2xl p-4 space-y-3 hover:border-rose-500/35 transition-all"
+                    >
                       <div className="flex items-start justify-between gap-2">
                         <div className="min-w-0">
                           <div className="flex items-center gap-2 flex-wrap">
                             <span className={`text-[10px] px-2 py-0.5 rounded-full border font-medium ${meta.badge}`}>
-                              {meta.label}
+                              {t(meta.labelKey)}
                             </span>
                             <h3 className="font-semibold text-white text-sm truncate">{cred.title}</h3>
                           </div>
@@ -717,12 +722,12 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
                       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                         <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-black/45 border border-white/8">
                           <div className="min-w-0">
-                            <div className="text-[10px] text-[#9C868E]">Kullanıcı</div>
+                            <div className="text-[10px] text-[#9C868E]">{t('cli.userLabel')}</div>
                             <div className="text-xs text-white font-mono-code truncate">{cred.username || '—'}</div>
                           </div>
                           {cred.username && (
                             <button
-                              onClick={() => copySecret(cred.username, 'Kullanıcı adı', 0)}
+                              onClick={() => copySecret(cred.username, t('pwd.usernameLabel'), 0)}
                               className="p-1 rounded bg-white/5 hover:bg-white/15 text-[#D7C7CC] cursor-pointer"
                             >
                               <Copy className="w-3.5 h-3.5" />
@@ -732,7 +737,7 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
 
                         <div className="flex items-center justify-between gap-2 px-3 py-2 rounded-xl bg-black/45 border border-white/8">
                           <div className="min-w-0">
-                            <div className="text-[10px] text-[#9C868E]">Parola / Anahtar</div>
+                            <div className="text-[10px] text-[#9C868E]">{t('cli.passKeyLabel')}</div>
                             <div className="text-xs text-white font-mono-code truncate">
                               {revealed ? cred.password || '—' : '••••••••••••'}
                             </div>
@@ -745,7 +750,9 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
                               {revealed ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
                             </button>
                             <button
-                              onClick={() => copySecret(cred.password, `${cred.title} şifresi`, clipboardClearSeconds)}
+                              onClick={() =>
+                                copySecret(cred.password, t('cli.passOf', { title: cred.title }), clipboardClearSeconds)
+                              }
                               className="p-1 rounded bg-[#9F1239]/60 hover:bg-[#BE123C] text-white cursor-pointer"
                             >
                               <Copy className="w-3.5 h-3.5" />
@@ -777,7 +784,7 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
             {detail.notes.length === 0 ? (
               <div className="lg:col-span-2 pv-glass rounded-2xl p-10 text-center text-sm text-[#A8929A]">
-                Henüz bu müşteriye ait not veya `.env` dosyası eklenmedi.
+                {t('cli.noNotes')}
               </div>
             ) : (
               detail.notes.map((n) => (
@@ -798,7 +805,7 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
                       <button
                         onClick={() => copySecret(n.content, n.title, clipboardClearSeconds)}
                         className="p-1.5 rounded-lg bg-white/5 hover:bg-white/15 text-[#D7C7CC] cursor-pointer"
-                        title="İçeriği kopyala"
+                        title={t('cli.copyContent')}
                       >
                         <Copy className="w-3.5 h-3.5" />
                       </button>
@@ -831,9 +838,7 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
             {detail.files.length === 0 ? (
               <div className="pv-glass rounded-2xl p-10 text-center space-y-3">
                 <FileKey2 className="w-9 h-9 text-rose-400/60 mx-auto" />
-                <div className="text-sm text-[#A8929A]">
-                  SSH anahtarları (.pem/.ppk), SSL sertifikaları (.crt/.key), .env veya config dosyalarını AES-256-GCM ile şifreli saklayın.
-                </div>
+                <div className="text-sm text-[#A8929A]">{t('cli.noFiles')}</div>
               </div>
             ) : (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
@@ -849,9 +854,7 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
                       <div className="min-w-0">
                         <div className="text-sm font-medium text-white truncate font-mono-code">{f.filename}</div>
                         <div className="text-xs text-[#B8A2AA] flex items-center gap-2 mt-0.5">
-                          <span className="text-rose-200/90">
-                            {FILE_CATEGORY_LABELS[f.category] || 'Şifreli Dosya'}
-                          </span>
+                          <span className="text-rose-200/90">{fileCategoryLabel(f.category)}</span>
                           <span>·</span>
                           <span>{formatBytes(f.sizeBytes)}</span>
                           <span>· AES-256</span>
@@ -864,7 +867,7 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
                         <button
                           onClick={() => handlePreviewFile(f)}
                           className="p-2 rounded-lg bg-white/5 hover:bg-white/15 text-[#F8F4F5] cursor-pointer"
-                          title="Şifresini Çözüp Önizle"
+                          title={t('cli.previewDecrypt')}
                         >
                           <Eye className="w-4 h-4" />
                         </button>
@@ -872,14 +875,14 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
                       <a
                         href={`/api/clients/${c.id}/files/${f.id}/download`}
                         className="p-2 rounded-lg bg-[#9F1239]/55 hover:bg-[#BE123C] text-white"
-                        title="Şifresini Çözüp İndir"
+                        title={t('cli.downloadDecrypt')}
                       >
                         <Download className="w-4 h-4" />
                       </a>
                       <button
                         onClick={() => handleDeleteFile(f)}
                         className="p-2 rounded-lg bg-white/5 hover:bg-rose-950/60 text-rose-300 cursor-pointer"
-                        title="Sil"
+                        title={t('common.delete')}
                       >
                         <Trash2 className="w-4 h-4" />
                       </button>
@@ -904,27 +907,27 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
         <Modal
           open={clientModalOpen}
           onClose={() => setClientModalOpen(false)}
-          title={editingClient ? 'Müşteri Kasasını Düzenle' : 'Yeni Müşteri Kasası Oluştur'}
+          title={editingClient ? t('cli.modalEditClient') : t('cli.modalCreateClient')}
           size="md"
         >
           <form onSubmit={handleSaveClient} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs text-[#D7C7CC] mb-1.5">Müşteri / Proje Adı *</label>
+                <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('cli.clientName')}</label>
                 <input
                   value={clientForm.name || ''}
                   onChange={(e) => setClientForm({ ...clientForm, name: e.target.value })}
-                  placeholder="Örn: Aura E-Ticaret"
+                  placeholder={t('cli.clientNamePlaceholder')}
                   className="pv-input"
                   required
                 />
               </div>
               <div>
-                <label className="block text-xs text-[#D7C7CC] mb-1.5">Şirket / Marka</label>
+                <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('cli.companyLabel')}</label>
                 <input
                   value={clientForm.company || ''}
                   onChange={(e) => setClientForm({ ...clientForm, company: e.target.value })}
-                  placeholder="Firma ünvanı"
+                  placeholder={t('cli.companyPlaceholder')}
                   className="pv-input"
                 />
               </div>
@@ -932,51 +935,51 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs text-[#D7C7CC] mb-1.5">Ana Web Sitesi / Domain</label>
+                <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('cli.domainLabel')}</label>
                 <input
                   value={clientForm.domain || ''}
                   onChange={(e) => setClientForm({ ...clientForm, domain: e.target.value })}
-                  placeholder="ornek-musteri.com"
+                  placeholder={t('cli.domainPlaceholder')}
                   className="pv-input"
                 />
               </div>
               <div>
-                <label className="block text-xs text-[#D7C7CC] mb-1.5">Durum</label>
+                <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('common.status')}</label>
                 <select
                   value={clientForm.status || 'active'}
                   onChange={(e) => setClientForm({ ...clientForm, status: e.target.value as ClientStatus })}
                   className="pv-select w-full"
                 >
-                  <option value="active">Aktif</option>
-                  <option value="maintenance">Bakımda</option>
-                  <option value="archived">Arşiv</option>
+                  <option value="active">{t('cli.statusActive')}</option>
+                  <option value="maintenance">{t('cli.statusMaintenance')}</option>
+                  <option value="archived">{t('cli.statusArchived')}</option>
                 </select>
               </div>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs text-[#D7C7CC] mb-1.5">İletişim E-posta</label>
+                <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('cli.contactEmail')}</label>
                 <input
                   value={clientForm.contactEmail || ''}
                   onChange={(e) => setClientForm({ ...clientForm, contactEmail: e.target.value })}
-                  placeholder="info@musteri.com"
+                  placeholder={t('cli.contactEmailPlaceholder')}
                   className="pv-input"
                 />
               </div>
               <div>
-                <label className="block text-xs text-[#D7C7CC] mb-1.5">Telefon</label>
+                <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('cli.phone')}</label>
                 <input
                   value={clientForm.contactPhone || ''}
                   onChange={(e) => setClientForm({ ...clientForm, contactPhone: e.target.value })}
-                  placeholder="+90 5xx ..."
+                  placeholder={t('cli.phonePlaceholder')}
                   className="pv-input"
                 />
               </div>
             </div>
 
             <div>
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">Teknoloji / Etiketler (virgülle)</label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('cli.techTags')}</label>
               <input
                 value={clientTagsText}
                 onChange={(e) => setClientTagsText(e.target.value)}
@@ -986,7 +989,7 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">Genel Notlar</label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('cli.generalNotes')}</label>
               <textarea
                 rows={3}
                 value={clientForm.notes || ''}
@@ -997,10 +1000,10 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
 
             <div className="flex justify-end gap-2.5 pt-2 border-t border-white/10">
               <button type="button" onClick={() => setClientModalOpen(false)} className="pv-btn-secondary">
-                İptal
+                {t('common.cancel')}
               </button>
               <button type="submit" className="pv-btn-primary">
-                {editingClient ? 'Güncelle' : 'Kasa Oluştur'}
+                {editingClient ? t('common.update') : t('cli.createVaultBtn')}
               </button>
             </div>
           </form>
@@ -1010,23 +1013,23 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
         <Modal
           open={credModalOpen}
           onClose={() => setCredModalOpen(false)}
-          title={editingCred ? 'Erişim Bilgisini Düzenle' : 'Yeni Müşteri Erişimi Ekle'}
+          title={editingCred ? t('cli.modalEditCred') : t('cli.modalCreateCred')}
           size="md"
         >
           <form onSubmit={handleSaveCred} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs text-[#D7C7CC] mb-1.5">Başlık *</label>
+                <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('pwd.fieldTitle')}</label>
                 <input
                   value={credForm.title || ''}
                   onChange={(e) => setCredForm({ ...credForm, title: e.target.value })}
-                  placeholder="Örn: cPanel, WP-Admin, Production DB"
+                  placeholder={t('cli.credTitlePlaceholder')}
                   className="pv-input"
                   required
                 />
               </div>
               <div>
-                <label className="block text-xs text-[#D7C7CC] mb-1.5">Erişim Türü</label>
+                <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('cli.credType')}</label>
                 <select
                   value={credForm.credentialType || 'admin'}
                   onChange={(e) =>
@@ -1036,7 +1039,7 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
                 >
                   {(Object.keys(CRED_TYPE_META) as ClientCredentialType[]).map((k) => (
                     <option key={k} value={k}>
-                      {CRED_TYPE_META[k].label}
+                      {t(CRED_TYPE_META[k].labelKey)}
                     </option>
                   ))}
                 </select>
@@ -1045,16 +1048,16 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-4 gap-3">
               <div className="sm:col-span-3">
-                <label className="block text-xs text-[#D7C7CC] mb-1.5">URL / Sunucu IP / Host</label>
+                <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('cli.hostUrl')}</label>
                 <input
                   value={credForm.hostOrUrl || ''}
                   onChange={(e) => setCredForm({ ...credForm, hostOrUrl: e.target.value })}
-                  placeholder="https://site.com/wp-admin veya 185.x.x.x"
+                  placeholder={t('cli.hostPlaceholder')}
                   className="pv-input font-mono-code"
                 />
               </div>
               <div>
-                <label className="block text-xs text-[#D7C7CC] mb-1.5">Port</label>
+                <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('cli.port')}</label>
                 <input
                   value={credForm.port || ''}
                   onChange={(e) => setCredForm({ ...credForm, port: e.target.value })}
@@ -1066,7 +1069,7 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div>
-                <label className="block text-xs text-[#D7C7CC] mb-1.5">Kullanıcı Adı / E-posta</label>
+                <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('pwd.fieldUsername')}</label>
                 <input
                   value={credForm.username || ''}
                   onChange={(e) => setCredForm({ ...credForm, username: e.target.value })}
@@ -1075,13 +1078,13 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
               </div>
               <div>
                 <div className="flex items-center justify-between mb-1.5">
-                  <label className="text-xs text-[#D7C7CC]">Parola / Token</label>
+                  <label className="text-xs text-[#D7C7CC]">{t('cli.passToken')}</label>
                   <button
                     type="button"
                     onClick={() => setGenOpen(true)}
                     className="text-[11px] text-rose-300 hover:text-white inline-flex items-center gap-1 cursor-pointer"
                   >
-                    <Sparkles className="w-3 h-3" /> Üret
+                    <Sparkles className="w-3 h-3" /> {t('cli.generateShort')}
                   </button>
                 </div>
                 <input
@@ -1093,7 +1096,7 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
             </div>
 
             <div>
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">Notlar</label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('common.notes')}</label>
               <textarea
                 rows={2}
                 value={credForm.notes || ''}
@@ -1104,10 +1107,10 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
 
             <div className="flex justify-end gap-2.5 pt-2 border-t border-white/10">
               <button type="button" onClick={() => setCredModalOpen(false)} className="pv-btn-secondary">
-                İptal
+                {t('common.cancel')}
               </button>
               <button type="submit" className="pv-btn-primary">
-                Kaydet
+                {t('common.save')}
               </button>
             </div>
           </form>
@@ -1117,23 +1120,23 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
         <Modal
           open={noteModalOpen}
           onClose={() => setNoteModalOpen(false)}
-          title={editingNote ? 'Müşteri Notunu Düzenle' : 'Yeni Müşteri Notu / .env'}
+          title={editingNote ? t('cli.modalEditNote') : t('cli.modalCreateNote')}
           size="lg"
         >
           <form onSubmit={handleSaveNote} className="space-y-4">
             <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div className="sm:col-span-2">
-                <label className="block text-xs text-[#D7C7CC] mb-1.5">Başlık</label>
+                <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('pwd.fieldTitle')}</label>
                 <input
                   value={noteForm.title || ''}
                   onChange={(e) => setNoteForm({ ...noteForm, title: e.target.value })}
-                  placeholder="Örn: .env.production veya Sunucu Kurulum Notları"
+                  placeholder={t('cli.noteTitlePlaceholder')}
                   className="pv-input"
                   required
                 />
               </div>
               <div>
-                <label className="block text-xs text-[#D7C7CC] mb-1.5">Tür</label>
+                <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('cli.noteTypeLabel')}</label>
                 <select
                   value={noteForm.noteType || 'markdown'}
                   onChange={(e) =>
@@ -1142,13 +1145,13 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
                   className="pv-select w-full"
                 >
                   <option value="markdown">Markdown</option>
-                  <option value="env">.env Dosyası</option>
-                  <option value="text">Düz Metin</option>
+                  <option value="env">{t('cli.noteTypeEnv')}</option>
+                  <option value="text">{t('cli.noteTypeText')}</option>
                 </select>
               </div>
             </div>
             <div>
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">İçerik</label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('cli.contentLabel')}</label>
               <textarea
                 rows={10}
                 value={noteForm.content || ''}
@@ -1158,10 +1161,10 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
             </div>
             <div className="flex justify-end gap-2.5 pt-2 border-t border-white/10">
               <button type="button" onClick={() => setNoteModalOpen(false)} className="pv-btn-secondary">
-                İptal
+                {t('common.cancel')}
               </button>
               <button type="submit" className="pv-btn-primary">
-                Şifrele & Kaydet
+                {t('cli.encryptSave')}
               </button>
             </div>
           </form>
@@ -1171,8 +1174,8 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
         <Modal
           open={Boolean(previewModal)}
           onClose={() => setPreviewModal(null)}
-          title={previewModal?.filename || 'Dosya Önizleme'}
-          subtitle="Şifresi bellekte çözülerek görüntülendi"
+          title={previewModal?.filename || t('cli.filePreviewTitle')}
+          subtitle={t('cli.filePreviewSub')}
           size="lg"
         >
           {previewModal && (
@@ -1186,7 +1189,7 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
                   className="pv-btn-primary text-xs"
                 >
                   <Copy className="w-3.5 h-3.5" />
-                  İçeriği Kopyala
+                  {t('cli.copyContent')}
                 </button>
               </div>
             </div>
@@ -1197,30 +1200,28 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
         <Modal
           open={exportZipOpen}
           onClose={() => setExportZipOpen(false)}
-          title="Müşteri Kasasını ZIP Olarak Dışa Aktar"
-          subtitle="Tüm erişim bilgilerini, notları ve ek dosyaları tek ZIP arşivinde paketleyin"
+          title={t('cli.exportZipTitle')}
+          subtitle={t('cli.exportZipSub')}
           size="sm"
         >
           <form onSubmit={handleExportClientZip} className="space-y-4">
             <div>
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">
-                ZIP Şifreleme Parolası (AES-256 — şiddetle önerilir)
-              </label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('cli.exportZipPassLabel')}</label>
               <input
                 type="password"
                 value={exportZipPassword}
                 onChange={(e) => setExportZipPassword(e.target.value)}
-                placeholder="Boş bırakırsanız şifresiz ZIP oluşturulur"
+                placeholder={t('cli.exportZipPassPlaceholder')}
                 className="pv-input"
               />
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <button type="button" onClick={() => setExportZipOpen(false)} className="pv-btn-secondary">
-                İptal
+                {t('common.cancel')}
               </button>
               <button type="submit" disabled={exportingZip} className="pv-btn-primary">
                 <Download className="w-4 h-4" />
-                {exportingZip ? 'Hazırlanıyor...' : 'ZIP İndir'}
+                {exportingZip ? t('cli.preparing') : t('cli.downloadZip')}
               </button>
             </div>
           </form>
@@ -1230,8 +1231,8 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
         <Modal
           open={importOpen}
           onClose={() => setImportOpen(false)}
-          title="Toplu Müşteri Şifre Arşivi İçe Aktar (ZIP / CSV / .env / Anahtarlar)"
-          subtitle="Parola korumalı ZIP dahil tüm arşivler bellekte çözülür, önizlenir ve hedef müşteri kasasına AES-256-GCM ile şifrelenerek kaydedilir."
+          title={t('cli.importModalTitle')}
+          subtitle={t('cli.importModalSub')}
           size="2xl"
         >
           <div className="space-y-5">
@@ -1256,15 +1257,8 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
                 <FolderArchive className="w-6 h-6" />
               </div>
               <div>
-                <div className="text-sm font-medium text-white">
-                  Müşteri ZIP arşivini veya dosyalarını buraya sürükleyin
-                </div>
-                <p className="text-xs text-[#B8A2AA] mt-1">
-                  Desteklenenler: Parolalı/Standart <code className="text-rose-200">.zip</code> · Chrome/Bitwarden/1Password{' '}
-                  <code className="text-rose-200">.csv</code> & <code className="text-rose-200">.json</code> ·{' '}
-                  <code className="text-rose-200">.env</code> · <code className="text-rose-200">.txt/.md</code> ·{' '}
-                  <code className="text-rose-200">.pem/.ppk/.crt/.key</code>
-                </p>
+                <div className="text-sm font-medium text-white">{t('cli.dropzoneTitle')}</div>
+                <p className="text-xs text-[#B8A2AA] mt-1">{t('cli.dropzoneSupported')}</p>
               </div>
               <div className="flex flex-wrap items-center justify-center gap-2.5 pt-1">
                 <button
@@ -1274,16 +1268,16 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
                   className="pv-btn-primary text-xs"
                 >
                   <Upload className="w-4 h-4" />
-                  {parsingArchive ? 'Arşiv Ayrıştırılıyor...' : 'ZIP veya Dosya Seç'}
+                  {parsingArchive ? t('cli.parsing') : t('cli.selectFiles')}
                 </button>
                 <a href="/api/clients/templates/csv" className="pv-btn-secondary text-xs">
                   <Download className="w-3.5 h-3.5 text-rose-300" />
-                  Örnek CSV Şablonu İndir
+                  {t('cli.sampleCsv')}
                 </a>
               </div>
               {importFiles.length > 0 && (
                 <div className="text-xs text-rose-200 pt-1">
-                  Seçilen: {importFiles.map((f) => f.name).join(', ')}
+                  {t('cli.selectedFiles', { files: importFiles.map((f) => f.name).join(', ') })}
                 </div>
               )}
             </div>
@@ -1294,7 +1288,7 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
                 <div className="flex items-start gap-2.5 text-sm text-rose-100">
                   <Lock className="w-4 h-4 text-rose-400 shrink-0 mt-0.5" />
                   <div>
-                    <div className="font-semibold">Parola Korumalı ZIP Algılandı</div>
+                    <div className="font-semibold">{t('cli.zipProtectedTitle')}</div>
                     <p className="text-xs text-rose-200/85 mt-0.5">{zipPasswordError}</p>
                   </div>
                 </div>
@@ -1309,7 +1303,7 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
                         runArchivePreview(importFiles, zipPassword);
                       }
                     }}
-                    placeholder="ZIP arşiv parolasını girin..."
+                    placeholder={t('cli.zipPassPlaceholder')}
                     className="pv-input flex-1"
                     autoFocus
                   />
@@ -1319,7 +1313,7 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
                     disabled={parsingArchive || !zipPassword}
                     className="pv-btn-primary shrink-0"
                   >
-                    {parsingArchive ? 'Çözülüyor...' : 'Arşivi Çöz'}
+                    {parsingArchive ? t('cli.decryptingArchive') : t('cli.decryptArchiveBtn')}
                   </button>
                 </div>
               </div>
@@ -1343,11 +1337,11 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
                 <div className="rounded-2xl bg-black/45 border border-white/10 p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-xs font-semibold uppercase tracking-wider text-rose-200">
-                      Hedef Müşteri Kasası
+                      {t('cli.targetVault')}
                     </span>
                     {previewData.wasEncryptedZip && (
                       <span className="text-[11px] px-2.5 py-0.5 rounded-full bg-emerald-500/20 text-emerald-200 border border-emerald-400/30">
-                        Şifreli ZIP Başarıyla Çözüldü
+                        {t('cli.zipDecryptedBadge')}
                       </span>
                     )}
                   </div>
@@ -1357,10 +1351,10 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
                     onChange={(e) => setImportTargetClientId(e.target.value)}
                     className="pv-select w-full"
                   >
-                    <option value="__new__">+ Yeni Müşteri Kasası Oluştur</option>
+                    <option value="__new__">{t('cli.createNewClientOpt')}</option>
                     {clients.map((cl) => (
                       <option key={cl.id} value={cl.id}>
-                        Mevcut Kasa: {cl.name} {cl.domain ? `(${cl.domain})` : ''}
+                        {t('cli.existingVaultOpt', { name: `${cl.name}${cl.domain ? ` (${cl.domain})` : ''}` })}
                       </option>
                     ))}
                   </select>
@@ -1368,29 +1362,29 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
                   {importTargetClientId === '__new__' && (
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 pt-1">
                       <div>
-                        <label className="block text-[11px] text-[#C8B5BC] mb-1">Yeni Müşteri Adı *</label>
+                        <label className="block text-[11px] text-[#C8B5BC] mb-1">{t('cli.newClientNameLabel')}</label>
                         <input
                           value={newClientName}
                           onChange={(e) => setNewClientName(e.target.value)}
-                          placeholder="Müşteri / Proje Adı"
+                          placeholder={t('cli.newClientNamePlaceholder')}
                           className="pv-input text-xs"
                         />
                       </div>
                       <div>
-                        <label className="block text-[11px] text-[#C8B5BC] mb-1">Domain (Otomatik Algılandı)</label>
+                        <label className="block text-[11px] text-[#C8B5BC] mb-1">{t('cli.autoDomainLabel')}</label>
                         <input
                           value={newClientDomain}
                           onChange={(e) => setNewClientDomain(e.target.value)}
-                          placeholder="musteri.com"
+                          placeholder={t('cli.domainPlaceholder')}
                           className="pv-input text-xs"
                         />
                       </div>
                       <div>
-                        <label className="block text-[11px] text-[#C8B5BC] mb-1">Şirket (Opsiyonel)</label>
+                        <label className="block text-[11px] text-[#C8B5BC] mb-1">{t('cli.companyOptLabel')}</label>
                         <input
                           value={newClientCompany}
                           onChange={(e) => setNewClientCompany(e.target.value)}
-                          placeholder="Şirket adı"
+                          placeholder={t('cli.companyOptPlaceholder')}
                           className="pv-input text-xs"
                         />
                       </div>
@@ -1403,7 +1397,10 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
                   <div className="space-y-2">
                     <div className="flex items-center justify-between text-xs">
                       <span className="font-semibold text-white">
-                        Tespit Edilen Erişim Bilgileri ({selectedCredIds.size}/{previewData.credentials.length})
+                        {t('cli.detectedCreds', {
+                          selected: selectedCredIds.size,
+                          total: previewData.credentials.length,
+                        })}
                       </span>
                       <button
                         type="button"
@@ -1416,7 +1413,7 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
                         }
                         className="text-rose-300 hover:text-white cursor-pointer"
                       >
-                        Tümünü Seç / Kaldır
+                        {t('cli.toggleAll')}
                       </button>
                     </div>
                     <div className="max-h-48 overflow-y-auto rounded-xl border border-white/10 divide-y divide-white/8 bg-black/35">
@@ -1436,7 +1433,7 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
                               CRED_TYPE_META[cr.credentialType].badge
                             }`}
                           >
-                            {CRED_TYPE_META[cr.credentialType].label}
+                            {t(CRED_TYPE_META[cr.credentialType].labelKey)}
                           </span>
                           <span className="font-medium text-white truncate flex-1">{cr.title}</span>
                           <span className="text-[#B8A2AA] font-mono-code truncate max-w-[160px]">
@@ -1455,7 +1452,10 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
                 {previewData.notes.length > 0 && (
                   <div className="space-y-2">
                     <div className="text-xs font-semibold text-white">
-                      Notlar & .env Belgeleri ({selectedNoteIds.size}/{previewData.notes.length})
+                      {t('cli.detectedNotes', {
+                        selected: selectedNoteIds.size,
+                        total: previewData.notes.length,
+                      })}
                     </div>
                     <div className="max-h-36 overflow-y-auto rounded-xl border border-white/10 divide-y divide-white/8 bg-black/35">
                       {previewData.notes.map((nt) => (
@@ -1484,7 +1484,10 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
                 {previewData.files.length > 0 && (
                   <div className="space-y-2">
                     <div className="text-xs font-semibold text-white">
-                      Şifreli Dosyalar & Anahtarlar ({selectedFileIds.size}/{previewData.files.length})
+                      {t('cli.detectedFiles', {
+                        selected: selectedFileIds.size,
+                        total: previewData.files.length,
+                      })}
                     </div>
                     <div className="max-h-36 overflow-y-auto rounded-xl border border-white/10 divide-y divide-white/8 bg-black/35">
                       {previewData.files.map((fl) => (
@@ -1500,7 +1503,7 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
                           />
                           <FileKey2 className="w-3.5 h-3.5 text-amber-300 shrink-0" />
                           <span className="text-white font-mono-code truncate flex-1">{fl.filename}</span>
-                          <span className="text-[#B8A2AA]">{FILE_CATEGORY_LABELS[fl.category] || fl.category}</span>
+                          <span className="text-[#B8A2AA]">{fileCategoryLabel(fl.category)}</span>
                           <span className="text-[#9C868E]">{formatBytes(fl.sizeBytes)}</span>
                         </label>
                       ))}
@@ -1510,14 +1513,18 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
 
                 <div className="flex items-center justify-between pt-3 border-t border-white/10">
                   <span className="text-xs text-[#C8B5BC]">
-                    Seçili toplam:{' '}
+                    {t('cli.selectedTotal')}{' '}
                     <strong className="text-white">
-                      {selectedCredIds.size} erişim · {selectedNoteIds.size} not · {selectedFileIds.size} şifreli dosya
+                      {t('cli.selectedSummary', {
+                        creds: selectedCredIds.size,
+                        notes: selectedNoteIds.size,
+                        files: selectedFileIds.size,
+                      })}
                     </strong>
                   </span>
                   <div className="flex gap-2">
                     <button type="button" onClick={() => setImportOpen(false)} className="pv-btn-secondary">
-                      İptal
+                      {t('common.cancel')}
                     </button>
                     <button
                       type="button"
@@ -1529,7 +1536,7 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
                       className="pv-btn-primary"
                     >
                       <Check className="w-4 h-4" />
-                      {committingImport ? 'Şifreleniyor...' : 'Müşteri Kasasına Şifreleyerek Aktar'}
+                      {committingImport ? t('common.encrypting') : t('cli.commitImportBtn')}
                     </button>
                   </div>
                 </div>
@@ -1553,19 +1560,17 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
-          <h1 className="font-display text-2xl font-semibold text-white">Müşteri Kasaları & Toplu Arşivler</h1>
-          <p className="text-sm text-[#C8B5BC] mt-0.5">
-            Geliştirdiğiniz web sitelerine ait erişim bilgilerini, `.env` yapılandırmalarını ve SSH/SSL dosyalarını müşteri bazlı izole kasalarda saklayın.
-          </p>
+          <h1 className="font-display text-2xl font-semibold text-white">{t('cli.title')}</h1>
+          <p className="text-sm text-[#C8B5BC] mt-0.5">{t('cli.subtitle')}</p>
         </div>
         <div className="flex flex-wrap gap-2.5 shrink-0">
           <button onClick={() => openImportModal()} className="pv-btn-primary">
             <FileArchive className="w-4 h-4" />
-            Toplu ZIP / Arşiv İçe Aktar
+            {t('cli.bulkImport')}
           </button>
           <button onClick={openCreateClient} className="pv-btn-secondary">
             <Plus className="w-4 h-4" />
-            Yeni Müşteri Kasası
+            {t('cli.newClient')}
           </button>
         </div>
       </div>
@@ -1577,16 +1582,16 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
           <input
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Müşteri adı, şirket, domain veya teknoloji ara..."
+            placeholder={t('cli.searchPlaceholder')}
             className="pv-input pl-10"
           />
         </div>
         <div className="flex gap-1.5">
           {[
-            { id: 'all', label: `Tümü (${clients.length})` },
-            { id: 'active', label: 'Aktif' },
-            { id: 'maintenance', label: 'Bakımda' },
-            { id: 'archived', label: 'Arşiv' },
+            { id: 'all', label: t('pwd.allPill', { count: clients.length }) },
+            { id: 'active', label: t('cli.statusActive') },
+            { id: 'maintenance', label: t('cli.statusMaintenance') },
+            { id: 'archived', label: t('cli.statusArchived') },
           ].map((f) => (
             <button
               key={f.id}
@@ -1604,24 +1609,22 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
       </div>
 
       {detailLoading ? (
-        <div className="pv-glass rounded-2xl p-12 text-center text-sm text-[#D7C7CC]">Müşteri kasası çözülüyor...</div>
+        <div className="pv-glass rounded-2xl p-12 text-center text-sm text-[#D7C7CC]">{t('cli.decrypting')}</div>
       ) : filteredClients.length === 0 ? (
         <div className="pv-glass rounded-2xl p-12 text-center space-y-4">
           <div className="w-14 h-14 rounded-2xl bg-[#9F1239]/25 border border-rose-500/35 flex items-center justify-center mx-auto text-rose-300">
             <Briefcase className="w-7 h-7" />
           </div>
-          <div className="text-lg font-semibold text-white">Henüz müşteri kasası yok</div>
-          <p className="text-sm text-[#B8A2AA] max-w-lg mx-auto">
-            Bir müşteriye ait şifre CSV/JSON listesini, `.env` dosyasını ve SSH/SSL anahtarlarını içeren ZIP arşivini tek seferde yükleyin; PersonVault otomatik olarak ayrıştırıp o müşterinin kasasına şifrelesin.
-          </p>
+          <div className="text-lg font-semibold text-white">{t('cli.emptyTitle')}</div>
+          <p className="text-sm text-[#B8A2AA] max-w-lg mx-auto">{t('cli.emptyDesc')}</p>
           <div className="flex flex-wrap justify-center gap-3 pt-1">
             <button onClick={() => openImportModal()} className="pv-btn-primary">
               <FileArchive className="w-4 h-4" />
-              Toplu ZIP Arşivi Yükle
+              {t('cli.uploadZipBtn')}
             </button>
             <button onClick={openCreateClient} className="pv-btn-secondary">
               <Plus className="w-4 h-4" />
-              Boş Müşteri Kasası Oluştur
+              {t('cli.createEmptyBtn')}
             </button>
           </div>
         </div>
@@ -1645,7 +1648,7 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
                       </h3>
                       <div className="text-xs text-rose-300/85 truncate flex items-center gap-1">
                         <Globe className="w-3 h-3 shrink-0" />
-                        <span>{cl.domain || cl.company || 'Domain eklenmemiş'}</span>
+                        <span>{cl.domain || cl.company || t('dash.noDomain')}</span>
                       </div>
                     </div>
                   </div>
@@ -1658,7 +1661,11 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
                           : 'bg-white/10 text-[#B8A2AA]'
                     }`}
                   >
-                    {cl.status === 'active' ? 'Aktif' : cl.status === 'maintenance' ? 'Bakımda' : 'Arşiv'}
+                    {cl.status === 'active'
+                      ? t('cli.statusActive')
+                      : cl.status === 'maintenance'
+                        ? t('cli.statusMaintenance')
+                        : t('cli.statusArchived')}
                   </span>
                 </div>
 
@@ -1666,9 +1673,9 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
 
                 {cl.tags.length > 0 && (
                   <div className="flex flex-wrap gap-1.5">
-                    {cl.tags.slice(0, 4).map((t) => (
-                      <span key={t} className="text-[10px] px-2 py-0.5 rounded-full bg-white/6 text-[#D7C7CC]">
-                        #{t}
+                    {cl.tags.slice(0, 4).map((tag) => (
+                      <span key={tag} className="text-[10px] px-2 py-0.5 rounded-full bg-white/6 text-[#D7C7CC]">
+                        #{tag}
                       </span>
                     ))}
                   </div>
@@ -1678,15 +1685,15 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
               <div className="grid grid-cols-3 gap-2 pt-3 border-t border-white/8 text-center">
                 <div className="rounded-lg bg-black/35 py-1.5">
                   <div className="text-sm font-bold text-white">{cl.credentialCount || 0}</div>
-                  <div className="text-[10px] text-[#A8929A]">Erişim</div>
+                  <div className="text-[10px] text-[#A8929A]">{t('cli.statAccess')}</div>
                 </div>
                 <div className="rounded-lg bg-black/35 py-1.5">
                   <div className="text-sm font-bold text-white">{cl.noteCount || 0}</div>
-                  <div className="text-[10px] text-[#A8929A]">Not / .env</div>
+                  <div className="text-[10px] text-[#A8929A]">{t('cli.statNotes')}</div>
                 </div>
                 <div className="rounded-lg bg-black/35 py-1.5">
                   <div className="text-sm font-bold text-white">{cl.fileCount || 0}</div>
-                  <div className="text-[10px] text-[#A8929A]">Şifreli Dosya</div>
+                  <div className="text-[10px] text-[#A8929A]">{t('cli.statFiles')}</div>
                 </div>
               </div>
             </div>
@@ -1698,4 +1705,3 @@ export const ClientsPage: React.FC<ClientsPageProps> = ({
     </div>
   );
 };
-

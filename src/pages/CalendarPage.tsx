@@ -5,7 +5,6 @@ import {
   Calendar as CalendarIcon,
   ChevronLeft,
   ChevronRight,
-  CreditCard,
   Heart,
   Pencil,
   Plus,
@@ -21,19 +20,19 @@ import type {
   SubscriptionEntry,
 } from '../types';
 import {
-  TR_DAYS_SHORT,
-  TR_MONTHS,
+  DAYS_SHORT_BY_LANG,
+  MONTHS_BY_LANG,
   computeNextOccurrence,
   eventOccursOnDay,
   formatCountdown,
-  formatTurkishDate,
-  parseIsoDate,
+  formatLocalizedDate,
   startOfToday,
   toIsoDate,
 } from '../utils/dateUtils';
 import { formatCurrency } from '../utils/currencyUtils';
 import { Modal } from '../components/Modal';
 import { useToast } from '../components/Toast';
+import { useI18n, type TranslationKey } from '../i18n';
 
 interface CalendarPageProps {
   events: CalendarEventEntry[];
@@ -43,24 +42,24 @@ interface CalendarPageProps {
   onUpdateSettings: (patch: Partial<AppSettings>) => Promise<void>;
 }
 
-const EVENT_TYPE_META: Record<EventType, { label: string; color: string; pill: string }> = {
+const EVENT_TYPE_META: Record<EventType, { labelKey: TranslationKey; color: string; pill: string }> = {
   birthday: {
-    label: 'Doğum Günü',
+    labelKey: 'cal.type.birthday',
     color: 'text-rose-300',
     pill: 'bg-[#BE123C]/40 text-rose-100 border-rose-500/45',
   },
   anniversary: {
-    label: 'Yıldönümü',
+    labelKey: 'cal.type.anniversary',
     color: 'text-amber-300',
     pill: 'bg-amber-500/25 text-amber-100 border-amber-400/40',
   },
   important: {
-    label: 'Önemli Tarih',
+    labelKey: 'cal.type.important',
     color: 'text-white',
     pill: 'bg-white/15 text-white border-white/25',
   },
   reminder: {
-    label: 'Hatırlatma',
+    labelKey: 'cal.type.reminder',
     color: 'text-sky-300',
     pill: 'bg-sky-500/20 text-sky-100 border-sky-400/35',
   },
@@ -83,6 +82,7 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
   onRefresh,
   onUpdateSettings,
 }) => {
+  const { lang, t } = useI18n();
   const { notify } = useToast();
   const today = startOfToday();
   const [cursor, setCursor] = useState(() => new Date(today.getFullYear(), today.getMonth(), 1));
@@ -93,6 +93,8 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
 
   const year = cursor.getFullYear();
   const month = cursor.getMonth();
+  const months = MONTHS_BY_LANG[lang] || MONTHS_BY_LANG.tr;
+  const daysShort = DAYS_SHORT_BY_LANG[lang] || DAYS_SHORT_BY_LANG.tr;
 
   // Monday-first grid calculation
   const calendarCells = useMemo(() => {
@@ -115,9 +117,7 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
   }, [year, month]);
 
   const upcomingEvents = useMemo(() => {
-    return events
-      .map((e) => computeNextOccurrence(e, today))
-      .sort((a, b) => a.daysUntil - b.daysUntil);
+    return events.map((e) => computeNextOccurrence(e, today)).sort((a, b) => a.daysUntil - b.daysUntil);
   }, [events]);
 
   const openCreate = (dateIso?: string) => {
@@ -135,53 +135,51 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!form.title?.trim() || !form.date) {
-      notify('Başlık ve tarih gereklidir.', 'error');
+      notify(t('cal.requiredError'), 'error');
       return;
     }
     setSaving(true);
     try {
       const birthYear =
-        form.eventType === 'birthday'
-          ? form.birthYear || Number(form.date.slice(0, 4))
-          : null;
+        form.eventType === 'birthday' ? form.birthYear || Number(form.date.slice(0, 4)) : null;
       const payload = { ...form, birthYear };
       if (editing) {
         await api.updateEvent(editing.id, payload);
-        notify('Takvim kaydı güncellendi.');
+        notify(t('cal.updatedToast'));
       } else {
         await api.createEvent(payload);
-        notify('Yeni tarih takvime eklendi.');
+        notify(t('cal.createdToast'));
       }
       setModalOpen(false);
       await onRefresh();
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Kaydedilemedi.', 'error');
+      notify(err instanceof Error ? err.message : t('common.saveFailed'), 'error');
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (ev: CalendarEventEntry) => {
-    if (!window.confirm(`"${ev.title}" kaydını silmek istiyor musunuz?`)) return;
+    if (!window.confirm(t('cal.deleteConfirm', { title: ev.title }))) return;
     await api.deleteEvent(ev.id);
-    notify('Etkinlik silindi.');
+    notify(t('cal.deletedToast'));
     await onRefresh();
   };
 
   const requestBrowserNotifications = async () => {
     if (!('Notification' in window)) {
-      notify('Tarayıcınız masaüstü bildirimlerini desteklemiyor.', 'error');
+      notify(t('cal.notifUnsupported'), 'error');
       return;
     }
     const perm = await Notification.requestPermission();
     if (perm === 'granted') {
-      new Notification('PersonVault Bildirimleri Aktif', {
-        body: 'Doğum günleri ve yaklaşan önemli tarihleriniz için bildirim alacaksınız.',
+      new Notification(t('cal.notifActiveTitle'), {
+        body: t('cal.notifActiveBody'),
       });
       await onUpdateSettings({ browserNotifications: true });
-      notify('Tarayıcı bildirimleri etkinleştirildi!');
+      notify(t('cal.notifEnabled'));
     } else {
-      notify('Bildirim izni verilmedi.', 'info');
+      notify(t('cal.notifDenied'), 'info');
     }
   };
 
@@ -189,19 +187,17 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
         <div>
-          <h1 className="font-display text-2xl font-semibold text-white">Takvim & Hatırlatmalar</h1>
-          <p className="text-sm text-[#C8B5BC] mt-0.5">
-            Doğum günleri (otomatik yaş hesabı), yıldönümleri, önemli tarihler ve abonelik yenilemeleri.
-          </p>
+          <h1 className="font-display text-2xl font-semibold text-white">{t('cal.title')}</h1>
+          <p className="text-sm text-[#C8B5BC] mt-0.5">{t('cal.subtitle')}</p>
         </div>
         <div className="flex flex-wrap gap-2.5">
           <button onClick={requestBrowserNotifications} className="pv-btn-secondary text-xs">
             <Bell className="w-4 h-4 text-rose-300" />
-            Tarayıcı Bildirimi
+            {t('cal.browserNotif')}
           </button>
           <button onClick={() => openCreate()} className="pv-btn-primary">
             <Plus className="w-4 h-4" />
-            Yeni Tarih / Doğum Günü
+            {t('cal.newEvent')}
           </button>
         </div>
       </div>
@@ -218,7 +214,7 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
                 <ChevronLeft className="w-4 h-4" />
               </button>
               <h2 className="font-display text-lg sm:text-xl font-semibold text-white min-w-[175px] text-center">
-                {TR_MONTHS[month]} {year}
+                {months[month]} {year}
               </h2>
               <button
                 onClick={() => setCursor(new Date(year, month + 1, 1))}
@@ -230,7 +226,7 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
                 onClick={() => setCursor(new Date(today.getFullYear(), today.getMonth(), 1))}
                 className="ml-1 px-3 py-1.5 rounded-xl bg-white/6 hover:bg-white/12 text-xs text-rose-200 border border-white/10 cursor-pointer"
               >
-                Bugün
+                {t('cal.today')}
               </button>
             </div>
 
@@ -241,12 +237,12 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
                 onChange={(e) => onUpdateSettings({ showSubscriptionsOnCalendar: e.target.checked })}
                 className="accent-[#BE123C]"
               />
-              <span>Abonelik yenilemelerini göster</span>
+              <span>{t('cal.showSubs')}</span>
             </label>
           </div>
 
           <div className="grid grid-cols-7 gap-1.5 text-center text-xs font-medium text-[#B8A2AA] pb-1">
-            {TR_DAYS_SHORT.map((d) => (
+            {daysShort.map((d) => (
               <div key={d} className="py-1">
                 {d}
               </div>
@@ -261,9 +257,7 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
                 eventOccursOnDay(ev, cell.date.getFullYear(), cell.date.getMonth(), cell.date.getDate()),
               );
               const daySubs = settings.showSubscriptionsOnCalendar
-                ? subscriptions.filter(
-                    (s) => s.status === 'active' && s.nextBillingDate === iso,
-                  )
+                ? subscriptions.filter((s) => s.status === 'active' && s.nextBillingDate === iso)
                 : [];
 
               return (
@@ -291,7 +285,8 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
                   <div className="space-y-1 overflow-hidden">
                     {dayEvents.slice(0, 2).map((ev) => {
                       const age =
-                        ev.eventType === 'birthday' && (ev.birthYear || Number(ev.date.slice(0, 4)) < cell.date.getFullYear())
+                        ev.eventType === 'birthday' &&
+                        (ev.birthYear || Number(ev.date.slice(0, 4)) < cell.date.getFullYear())
                           ? cell.date.getFullYear() - (ev.birthYear || Number(ev.date.slice(0, 4)))
                           : null;
                       return (
@@ -304,7 +299,7 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
                           className={`w-full text-left text-[10px] px-1.5 py-0.5 rounded border truncate cursor-pointer ${
                             EVENT_TYPE_META[ev.eventType].pill
                           }`}
-                          title={`${ev.title}${age ? ` (${age}. yaş)` : ''}`}
+                          title={`${ev.title}${age ? ` (${t('cal.ageSuffix', { age })})` : ''}`}
                         >
                           {ev.eventType === 'birthday' ? '🎂 ' : ''}
                           {ev.title}
@@ -316,14 +311,14 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
                       <div
                         key={sub.id}
                         className="text-[10px] px-1.5 py-0.5 rounded bg-emerald-500/20 text-emerald-200 border border-emerald-400/30 truncate"
-                        title={`${sub.name}: ${formatCurrency(sub.price, sub.currency)}`}
+                        title={`${sub.name}: ${formatCurrency(sub.price, sub.currency, lang)}`}
                       >
                         💳 {sub.name}
                       </div>
                     ))}
                     {dayEvents.length + daySubs.length > 3 && (
                       <div className="text-[10px] text-rose-200 pl-1">
-                        +{dayEvents.length + daySubs.length - 3} daha
+                        {t('cal.moreCount', { count: dayEvents.length + daySubs.length - 3 })}
                       </div>
                     )}
                   </div>
@@ -338,18 +333,18 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-base font-semibold text-white flex items-center gap-2">
               <Sparkles className="w-4 h-4 text-rose-400" />
-              Yaklaşan Tarihler & Sayaç
+              {t('cal.upcomingHeader')}
             </h2>
-            <span className="text-xs text-[#B8A2AA]">{upcomingEvents.length} kayıt</span>
+            <span className="text-xs text-[#B8A2AA]">{t('cal.recordsCount', { count: upcomingEvents.length })}</span>
           </div>
 
           <div className="flex-1 overflow-y-auto space-y-2.5 pr-1">
             {upcomingEvents.length === 0 ? (
               <div className="py-12 text-center space-y-3">
                 <Cake className="w-9 h-9 text-rose-400/60 mx-auto" />
-                <div className="text-sm text-[#A8929A]">Henüz doğum günü veya önemli tarih eklenmemiş.</div>
+                <div className="text-sm text-[#A8929A]">{t('cal.emptyDesc')}</div>
                 <button onClick={() => openCreate()} className="pv-btn-secondary text-xs">
-                  İlk Tarihi Ekle
+                  {t('cal.addFirst')}
                 </button>
               </div>
             ) : (
@@ -372,9 +367,11 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
                       <div className="min-w-0">
                         <div className="text-sm font-semibold text-white truncate">{event.title}</div>
                         <div className="text-xs text-[#C8B5BC] mt-0.5">
-                          {formatTurkishDate(nextIso)}
+                          {formatLocalizedDate(nextIso, lang)}
                           {turningAge !== null && turningAge > 0 && (
-                            <span className="ml-1.5 text-rose-300 font-medium">· {turningAge}. yaş</span>
+                            <span className="ml-1.5 text-rose-300 font-medium">
+                              · {t('cal.ageSuffix', { age: turningAge })}
+                            </span>
                           )}
                         </div>
                       </div>
@@ -397,12 +394,12 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
 
                   <div className="flex items-center justify-between text-xs pt-1">
                     <span className="text-[#9C868E]">
-                      {EVENT_TYPE_META[event.eventType].label} ·{' '}
+                      {t(EVENT_TYPE_META[event.eventType].labelKey)} ·{' '}
                       {event.recurrence === 'yearly'
-                        ? 'Her Yıl'
+                        ? t('cal.rec.yearly')
                         : event.recurrence === 'monthly'
-                          ? 'Her Ay'
-                          : 'Tek Seferlik'}
+                          ? t('cal.rec.monthly')
+                          : t('cal.rec.none')}
                     </span>
                     <span
                       className={`px-2 py-0.5 rounded-full font-medium ${
@@ -413,7 +410,7 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
                             : 'bg-white/8 text-[#D7C7CC]'
                       }`}
                     >
-                      {formatCountdown(daysUntil)}
+                      {formatCountdown(daysUntil, lang)}
                     </span>
                   </div>
                   {event.notes && <p className="text-xs text-[#B8A2AA] border-t border-white/6 pt-1.5">{event.notes}</p>}
@@ -428,16 +425,16 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
       <Modal
         open={modalOpen}
         onClose={() => setModalOpen(false)}
-        title={editing ? 'Tarihi Düzenle' : 'Yeni Tarih / Doğum Günü Ekle'}
+        title={editing ? t('cal.modalEdit') : t('cal.modalCreate')}
         size="md"
       >
         <form onSubmit={handleSave} className="space-y-4">
           <div>
-            <label className="block text-xs text-[#D7C7CC] mb-1.5">Başlık *</label>
+            <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('cal.fieldTitle')}</label>
             <input
               value={form.title || ''}
               onChange={(e) => setForm({ ...form, title: e.target.value })}
-              placeholder="Örn: Annemin Doğum Günü, Domain Yenileme, Evlilik Yıldönümü"
+              placeholder={t('cal.fieldTitlePlaceholder')}
               className="pv-input"
               required
             />
@@ -445,7 +442,7 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">Etkinlik Türü</label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('cal.eventType')}</label>
               <select
                 value={form.eventType || 'birthday'}
                 onChange={(e) => {
@@ -458,15 +455,15 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
                 }}
                 className="pv-select w-full"
               >
-                <option value="birthday">Doğum Günü</option>
-                <option value="anniversary">Yıldönümü</option>
-                <option value="important">Önemli Tarih</option>
-                <option value="reminder">Hatırlatma</option>
+                <option value="birthday">{t('cal.type.birthday')}</option>
+                <option value="anniversary">{t('cal.type.anniversary')}</option>
+                <option value="important">{t('cal.type.important')}</option>
+                <option value="reminder">{t('cal.type.reminder')}</option>
               </select>
             </div>
             <div>
               <label className="block text-xs text-[#D7C7CC] mb-1.5">
-                {form.eventType === 'birthday' ? 'Doğum Tarihi' : 'Tarih'} *
+                {form.eventType === 'birthday' ? t('cal.birthDate') : t('cal.date')} *
               </label>
               <input
                 type="date"
@@ -487,68 +484,66 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div>
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">Tekrar</label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('cal.recurrence')}</label>
               <select
                 value={form.recurrence || 'yearly'}
                 onChange={(e) => setForm({ ...form, recurrence: e.target.value as RecurrenceType })}
                 className="pv-select w-full"
               >
-                <option value="yearly">Her Yıl</option>
-                <option value="monthly">Her Ay</option>
-                <option value="none">Tek Seferlik</option>
+                <option value="yearly">{t('cal.rec.yearly')}</option>
+                <option value="monthly">{t('cal.rec.monthly')}</option>
+                <option value="none">{t('cal.rec.none')}</option>
               </select>
             </div>
             <div>
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">Kaç Gün Önce Hatırlat?</label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('cal.remindBefore')}</label>
               <select
                 value={form.remindDaysBefore ?? 3}
                 onChange={(e) => setForm({ ...form, remindDaysBefore: Number(e.target.value) })}
                 className="pv-select w-full"
               >
-                <option value={0}>Aynı gün</option>
-                <option value={1}>1 gün önce</option>
-                <option value={3}>3 gün önce</option>
-                <option value={7}>7 gün önce</option>
-                <option value={14}>14 gün önce</option>
-                <option value={30}>30 gün önce</option>
+                <option value={0}>{t('cal.remind0')}</option>
+                <option value={1}>{t('cal.remind1')}</option>
+                <option value={3}>{t('cal.remind3')}</option>
+                <option value={7}>{t('cal.remind7')}</option>
+                <option value={14}>{t('cal.remind14')}</option>
+                <option value={30}>{t('cal.remind30')}</option>
               </select>
             </div>
           </div>
 
           {form.eventType === 'birthday' && (
             <div>
-              <label className="block text-xs text-[#D7C7CC] mb-1.5">
-                Doğum Yılı (Otomatik yaş hesabı için — opsiyonel)
-              </label>
+              <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('cal.birthYearLabel')}</label>
               <input
                 type="number"
                 min="1900"
                 max="2100"
                 value={form.birthYear ?? ''}
                 onChange={(e) => setForm({ ...form, birthYear: e.target.value ? Number(e.target.value) : null })}
-                placeholder="Örn: 1995"
+                placeholder={t('cal.birthYearPlaceholder')}
                 className="pv-input"
               />
             </div>
           )}
 
           <div>
-            <label className="block text-xs text-[#D7C7CC] mb-1.5">Notlar / Hediye Fikri</label>
+            <label className="block text-xs text-[#D7C7CC] mb-1.5">{t('cal.notesLabel')}</label>
             <textarea
               rows={3}
               value={form.notes || ''}
               onChange={(e) => setForm({ ...form, notes: e.target.value })}
-              placeholder="Hediye fikri, rezervasyon notu veya detay..."
+              placeholder={t('cal.notesPlaceholder')}
               className="pv-input resize-none"
             />
           </div>
 
           <div className="flex justify-end gap-2.5 pt-3 border-t border-white/10">
             <button type="button" onClick={() => setModalOpen(false)} className="pv-btn-secondary">
-              İptal
+              {t('common.cancel')}
             </button>
             <button type="submit" disabled={saving} className="pv-btn-primary">
-              {saving ? 'Kaydediliyor...' : editing ? 'Güncelle' : 'Kaydet'}
+              {saving ? t('common.saving') : editing ? t('common.update') : t('common.save')}
             </button>
           </div>
         </form>
@@ -556,4 +551,3 @@ export const CalendarPage: React.FC<CalendarPageProps> = ({
     </div>
   );
 };
-

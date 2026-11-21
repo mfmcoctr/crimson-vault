@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, setUnauthorizedHandler } from './api';
 import type {
+  AppLanguage,
   AppSettings,
   AuthStatus,
   CalendarEventEntry,
@@ -11,6 +12,7 @@ import type {
   TrackedProduct,
 } from './types';
 import { DEFAULT_SETTINGS } from './types';
+import { I18nProvider, useI18n } from './i18n';
 import { ToastProvider, useToast } from './components/Toast';
 import { LockScreen } from './components/LockScreen';
 import { Layout, type NavPage } from './components/Layout';
@@ -30,6 +32,7 @@ import { collectActiveReminders, type ActiveReminderAlert } from './utils/dateUt
 import { formatCurrency } from './utils/currencyUtils';
 
 const VaultAppInner: React.FC = () => {
+  const { lang, setLang, t, storeLabel } = useI18n();
   const { notify } = useToast();
   const [auth, setAuth] = useState<AuthStatus | null>(null);
   const [activePage, setActivePage] = useState<NavPage>('dashboard');
@@ -55,9 +58,9 @@ const VaultAppInner: React.FC = () => {
       const status = await api.getAuthStatus();
       setAuth(status);
     } catch {
-      notify('Yerel sunucuya bağlanılamadı.', 'error');
+      notify(t('app.serverError'), 'error');
     }
-  }, [notify]);
+  }, [notify, t]);
 
   const loadAllVaultData = useCallback(async () => {
     setLoadingVault(true);
@@ -72,6 +75,9 @@ const VaultAppInner: React.FC = () => {
         api.getDeals(),
       ]);
       setSettings(s);
+      if (s.language && !window.localStorage.getItem('pv_lang')) {
+        setLang(s.language);
+      }
       setPasswords(p);
       setSubscriptions(sub);
       setNotes(n);
@@ -83,7 +89,7 @@ const VaultAppInner: React.FC = () => {
     } finally {
       setLoadingVault(false);
     }
-  }, []);
+  }, [setLang]);
 
   useEffect(() => {
     checkAuth();
@@ -116,20 +122,24 @@ const VaultAppInner: React.FC = () => {
   }, [auth?.unlocked]);
 
   const reminders = useMemo<ActiveReminderAlert[]>(() => {
-    const base = collectActiveReminders(events, subscriptions);
+    const base = collectActiveReminders(events, subscriptions, lang);
     const dealAlerts: ActiveReminderAlert[] = deals
       .filter((d) => d.currentPrice > 0 && d.targetPrice > 0 && d.currentPrice <= d.targetPrice)
       .map((d) => ({
         id: `deal-${d.id}`,
         source: 'deal',
-        title: `🎯 İndirim Alarmı: ${d.name}`,
-        subtitle: `${d.store} · ${formatCurrency(d.currentPrice, d.currency)} (Hedef: ${formatCurrency(d.targetPrice, d.currency)})`,
+        title: t('app.dealAlertTitle', { name: d.name }),
+        subtitle: t('app.dealAlertSubtitle', {
+          store: storeLabel(d.store),
+          current: formatCurrency(d.currentPrice, d.currency, lang),
+          target: formatCurrency(d.targetPrice, d.currency, lang),
+        }),
         dateIso: d.updatedAt.slice(0, 10),
         daysUntil: 0,
         urgent: true,
       }));
     return [...dealAlerts, ...base];
-  }, [events, subscriptions, deals]);
+  }, [events, subscriptions, deals, lang, t, storeLabel]);
 
   // Fire daily browser notification for urgent reminders if granted
   useEffect(() => {
@@ -139,12 +149,12 @@ const VaultAppInner: React.FC = () => {
     if (localStorage.getItem(todayKey)) return;
     const urgent = reminders.filter((r) => r.daysUntil <= 1);
     if (urgent.length > 0) {
-      new Notification('PersonVault Hatırlatma', {
+      new Notification(t('app.reminderNotifTitle'), {
         body: urgent.map((u) => `${u.title} (${u.subtitle})`).slice(0, 3).join('\n'),
       });
       localStorage.setItem(todayKey, '1');
     }
-  }, [auth?.unlocked, settings.browserNotifications, reminders]);
+  }, [auth?.unlocked, settings.browserNotifications, reminders, t]);
 
   const handleLock = async () => {
     await api.lockVault();
@@ -156,7 +166,7 @@ const VaultAppInner: React.FC = () => {
     setDeals([]);
     setSearchOpen(false);
     await checkAuth();
-    notify('Kasa kilitlendi ve bellekteki anahtar temizlendi.', 'info');
+    notify(t('app.lockedToast'), 'info');
   };
 
   const handleUpdateSettings = async (patch: Partial<AppSettings>) => {
@@ -164,6 +174,13 @@ const VaultAppInner: React.FC = () => {
     setSettings(optimistic);
     const saved = await api.updateSettings(patch);
     setSettings(saved);
+  };
+
+  const handleLanguageChange = (next: AppLanguage) => {
+    setLang(next);
+    if (auth?.unlocked) {
+      handleUpdateSettings({ language: next }).catch(() => {});
+    }
   };
 
   const handleNavigate = (page: NavPage, opts?: { clientId?: string; filter?: string }) => {
@@ -175,7 +192,7 @@ const VaultAppInner: React.FC = () => {
   if (!auth) {
     return (
       <div className="min-h-screen bg-[#0B0507] flex items-center justify-center text-[#D7C7CC] text-sm">
-        PersonVault başlatılıyor...
+        {t('app.starting')}
       </div>
     );
   }
@@ -215,10 +232,11 @@ const VaultAppInner: React.FC = () => {
       onOpenSearch={() => setSearchOpen(true)}
       onOpenGenerator={() => setGenOpen(true)}
       onLock={handleLock}
+      onChangeLanguage={handleLanguageChange}
     >
       {loadingVault && passwords.length === 0 && clients.length === 0 ? (
         <div className="pv-glass rounded-2xl p-12 text-center text-sm text-[#D7C7CC]">
-          Şifreli veritabanı çözülüyor...
+          {t('app.decrypting')}
         </div>
       ) : (
         <>
@@ -321,9 +339,10 @@ const VaultAppInner: React.FC = () => {
 
 export default function App() {
   return (
-    <ToastProvider>
-      <VaultAppInner />
-    </ToastProvider>
+    <I18nProvider>
+      <ToastProvider>
+        <VaultAppInner />
+      </ToastProvider>
+    </I18nProvider>
   );
 }
-

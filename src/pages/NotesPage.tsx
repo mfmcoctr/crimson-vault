@@ -16,6 +16,7 @@ import {
 import { api } from '../api';
 import type { NoteEntry } from '../types';
 import { useToast } from '../components/Toast';
+import { useI18n } from '../i18n';
 
 const NOTE_CATEGORIES = ['Genel', 'Kişisel', 'İş', 'Finans', 'Teknik', 'Fikirler', 'Kurtarma Bilgileri'];
 
@@ -25,6 +26,7 @@ interface NotesPageProps {
 }
 
 export const NotesPage: React.FC<NotesPageProps> = ({ notes, onRefresh }) => {
+  const { locale, t, categoryLabel } = useI18n();
   const { notify, copySecret } = useToast();
   const [search, setSearch] = useState('');
   const [selectedId, setSelectedId] = useState<string | null>(notes[0]?.id || null);
@@ -44,13 +46,15 @@ export const NotesPage: React.FC<NotesPageProps> = ({ notes, onRefresh }) => {
     return [...notes]
       .filter((n) => {
         if (!q) return true;
-        return [n.title, n.content, n.category, n.tags.join(' ')].some((f) => f.toLowerCase().includes(q));
+        return [n.title, n.content, n.category, categoryLabel(n.category), n.tags.join(' ')].some((f) =>
+          f.toLowerCase().includes(q),
+        );
       })
       .sort((a, b) => {
         if (a.pinned !== b.pinned) return a.pinned ? -1 : 1;
         return b.updatedAt.localeCompare(a.updatedAt);
       });
-  }, [notes, search]);
+  }, [notes, search, categoryLabel]);
 
   const activeNote = useMemo(() => notes.find((n) => n.id === selectedId) || null, [notes, selectedId]);
 
@@ -73,15 +77,15 @@ export const NotesPage: React.FC<NotesPageProps> = ({ notes, onRefresh }) => {
 
   const handleCreateNote = async () => {
     const created = await api.createNote({
-      title: 'Yeni Güvenli Not',
-      content: '# Yeni Not\n\nMarkdown ile düzenli notlarınızı güvenle saklayın.\n\n- [ ] Yapılacak madde\n',
+      title: t('notes.defaultTitle'),
+      content: t('notes.defaultContent'),
       category: 'Genel',
       tags: [],
       pinned: false,
     });
     await onRefresh();
     setSelectedId(created.id);
-    notify('Yeni güvenli not oluşturuldu.');
+    notify(t('notes.createdToast'));
   };
 
   const handleSave = async () => {
@@ -89,20 +93,20 @@ export const NotesPage: React.FC<NotesPageProps> = ({ notes, onRefresh }) => {
     setSaving(true);
     try {
       await api.updateNote(activeNote.id, {
-        title: title.trim() || 'Başlıksız Not',
+        title: title.trim() || t('notes.untitled'),
         content,
         category,
         pinned,
         tags: tagsText
           .split(',')
-          .map((t) => t.trim())
+          .map((x) => x.trim())
           .filter(Boolean),
       });
       setDirty(false);
-      notify('Not şifrelenerek kaydedildi.');
+      notify(t('notes.savedToast'));
       await onRefresh();
     } catch (err) {
-      notify(err instanceof Error ? err.message : 'Not kaydedilemedi.', 'error');
+      notify(err instanceof Error ? err.message : t('notes.saveError'), 'error');
     } finally {
       setSaving(false);
     }
@@ -125,15 +129,15 @@ export const NotesPage: React.FC<NotesPageProps> = ({ notes, onRefresh }) => {
     setPinned(nextPinned);
     await api.updateNote(activeNote.id, { pinned: nextPinned });
     await onRefresh();
-    notify(nextPinned ? 'Not sabitlendi.' : 'Sabitleme kaldırıldı.');
+    notify(nextPinned ? t('notes.pinnedToast') : t('notes.unpinnedToast'));
   };
 
   const handleDelete = async () => {
     if (!activeNote) return;
-    if (!window.confirm(`"${activeNote.title}" notunu silmek istediğinize emin misiniz?`)) return;
+    if (!window.confirm(t('notes.deleteConfirm', { title: activeNote.title }))) return;
     await api.deleteNote(activeNote.id);
     setSelectedId(null);
-    notify('Not silindi.');
+    notify(t('notes.deletedToast'));
     await onRefresh();
   };
 
@@ -146,14 +150,12 @@ export const NotesPage: React.FC<NotesPageProps> = ({ notes, onRefresh }) => {
     <div className="space-y-4">
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
         <div>
-          <h1 className="font-display text-2xl font-semibold text-white">Güvenli Notlar</h1>
-          <p className="text-sm text-[#C8B5BC] mt-0.5">
-            Markdown destekli, yerel veritabanında AES-256-GCM ile şifrelenmiş özel not defteriniz.
-          </p>
+          <h1 className="font-display text-2xl font-semibold text-white">{t('notes.title')}</h1>
+          <p className="text-sm text-[#C8B5BC] mt-0.5">{t('notes.subtitle')}</p>
         </div>
         <button onClick={handleCreateNote} className="pv-btn-primary">
           <Plus className="w-4 h-4" />
-          Yeni Not
+          {t('notes.newBtn')}
         </button>
       </div>
 
@@ -165,14 +167,14 @@ export const NotesPage: React.FC<NotesPageProps> = ({ notes, onRefresh }) => {
             <input
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              placeholder="Notlarda ara..."
+              placeholder={t('notes.searchPlaceholder')}
               className="pv-input pl-9 py-2 text-xs"
             />
           </div>
 
           <div className="flex-1 overflow-y-auto space-y-2 pr-1">
             {sortedNotes.length === 0 ? (
-              <div className="py-10 text-center text-xs text-[#9C868E]">Not bulunamadı.</div>
+              <div className="py-10 text-center text-xs text-[#9C868E]">{t('notes.noNotes')}</div>
             ) : (
               sortedNotes.map((n) => {
                 const active = n.id === activeNote?.id;
@@ -191,11 +193,11 @@ export const NotesPage: React.FC<NotesPageProps> = ({ notes, onRefresh }) => {
                       {n.pinned && <Pin className="w-3.5 h-3.5 text-rose-400 shrink-0" />}
                     </div>
                     <p className="text-xs text-[#B8A2AA] line-clamp-2 mt-1">
-                      {n.content.replace(/[#*_`>]/g, '') || 'İçerik boş'}
+                      {n.content.replace(/[#*_`>]/g, '') || t('dash.emptyContent')}
                     </p>
                     <div className="flex items-center justify-between mt-2 text-[10px] text-[#9C868E]">
-                      <span>{n.category}</span>
-                      <span>{new Date(n.updatedAt).toLocaleDateString('tr-TR')}</span>
+                      <span>{categoryLabel(n.category)}</span>
+                      <span>{new Date(n.updatedAt).toLocaleDateString(locale)}</span>
                     </div>
                   </button>
                 );
@@ -209,13 +211,11 @@ export const NotesPage: React.FC<NotesPageProps> = ({ notes, onRefresh }) => {
           {!activeNote ? (
             <div className="flex-1 flex flex-col items-center justify-center p-10 text-center space-y-3">
               <StickyNote className="w-10 h-10 text-rose-400/70" />
-              <div className="text-base font-medium text-white">Henüz bir not seçilmedi</div>
-              <p className="text-sm text-[#A8929A]">
-                Soldan bir not seçin veya yeni bir şifreli Markdown notu oluşturun.
-              </p>
+              <div className="text-base font-medium text-white">{t('notes.noneSelected')}</div>
+              <p className="text-sm text-[#A8929A]">{t('notes.noneSelectedDesc')}</p>
               <button onClick={handleCreateNote} className="pv-btn-primary">
                 <Plus className="w-4 h-4" />
-                İlk Notu Oluştur
+                {t('notes.createFirst')}
               </button>
             </div>
           ) : (
@@ -229,7 +229,7 @@ export const NotesPage: React.FC<NotesPageProps> = ({ notes, onRefresh }) => {
                       setTitle(e.target.value);
                       setDirty(true);
                     }}
-                    placeholder="Not başlığı..."
+                    placeholder={t('notes.titlePlaceholder')}
                     className="bg-transparent text-white font-semibold text-base sm:text-lg outline-none flex-1 min-w-0"
                   />
                 </div>
@@ -237,9 +237,9 @@ export const NotesPage: React.FC<NotesPageProps> = ({ notes, onRefresh }) => {
                 <div className="flex items-center gap-1.5 flex-wrap">
                   <div className="flex rounded-lg bg-black/50 border border-white/10 p-0.5">
                     {[
-                      { id: 'edit', icon: <Edit3 className="w-3.5 h-3.5" />, label: 'Yaz' },
-                      { id: 'split', icon: <Columns2 className="w-3.5 h-3.5" />, label: 'Bölünmüş' },
-                      { id: 'preview', icon: <Eye className="w-3.5 h-3.5" />, label: 'Önizle' },
+                      { id: 'edit', icon: <Edit3 className="w-3.5 h-3.5" />, label: t('notes.modeEdit') },
+                      { id: 'split', icon: <Columns2 className="w-3.5 h-3.5" />, label: t('notes.modeSplit') },
+                      { id: 'preview', icon: <Eye className="w-3.5 h-3.5" />, label: t('notes.modePreview') },
                     ].map((m) => (
                       <button
                         key={m.id}
@@ -261,31 +261,27 @@ export const NotesPage: React.FC<NotesPageProps> = ({ notes, onRefresh }) => {
                         ? 'bg-[#9F1239]/40 border-rose-500/40 text-rose-200'
                         : 'bg-white/5 border-white/10 text-[#C8B5BC] hover:text-white'
                     }`}
-                    title={pinned ? 'Sabitlemeyi kaldır' : 'Sabitle'}
+                    title={pinned ? t('notes.unpin') : t('notes.pin')}
                   >
                     <Pin className="w-4 h-4" />
                   </button>
                   <button
-                    onClick={() => copySecret(content, 'Not içeriği', 0)}
+                    onClick={() => copySecret(content, t('notes.noteContentLabel'), 0)}
                     className="p-2 rounded-lg bg-white/5 border border-white/10 text-[#C8B5BC] hover:text-white cursor-pointer"
-                    title="Markdown kopyala"
+                    title={t('notes.copyMarkdown')}
                   >
                     <Copy className="w-4 h-4" />
                   </button>
                   <button
                     onClick={handleDelete}
                     className="p-2 rounded-lg bg-white/5 border border-white/10 text-[#C8B5BC] hover:text-rose-300 cursor-pointer"
-                    title="Notu sil"
+                    title={t('notes.deleteNote')}
                   >
                     <Trash2 className="w-4 h-4" />
                   </button>
-                  <button
-                    onClick={handleSave}
-                    disabled={saving}
-                    className="pv-btn-primary py-1.5 px-3 text-xs"
-                  >
+                  <button onClick={handleSave} disabled={saving} className="pv-btn-primary py-1.5 px-3 text-xs">
                     <Save className="w-3.5 h-3.5" />
-                    {saving ? 'Kaydediliyor...' : dirty ? 'Kaydet *' : 'Kaydedildi'}
+                    {saving ? t('common.saving') : dirty ? t('notes.saveDirty') : t('notes.saved')}
                   </button>
                 </div>
               </div>
@@ -302,7 +298,7 @@ export const NotesPage: React.FC<NotesPageProps> = ({ notes, onRefresh }) => {
                 >
                   {NOTE_CATEGORIES.map((c) => (
                     <option key={c} value={c}>
-                      {c}
+                      {categoryLabel(c)}
                     </option>
                   ))}
                 </select>
@@ -312,18 +308,20 @@ export const NotesPage: React.FC<NotesPageProps> = ({ notes, onRefresh }) => {
                     setTagsText(e.target.value);
                     setDirty(true);
                   }}
-                  placeholder="Etiketler (virgülle: banka, önemli, yedek)"
+                  placeholder={t('notes.tagsPlaceholder')}
                   className="bg-transparent text-[#D7C7CC] placeholder-[#8B747C] outline-none flex-1 min-w-[180px]"
                 />
                 <span className="text-[#9C868E]">
-                  {content.trim() ? content.trim().split(/\s+/).length : 0} kelime · Ctrl+S
+                  {t('notes.wordCount', { count: content.trim() ? content.trim().split(/\s+/).length : 0 })}
                 </span>
               </div>
 
               {/* Split Editor / Preview Body */}
               <div
                 className={`flex-1 grid ${
-                  viewMode === 'split' ? 'grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-white/10' : 'grid-cols-1'
+                  viewMode === 'split'
+                    ? 'grid-cols-1 md:grid-cols-2 divide-y md:divide-y-0 md:divide-x divide-white/10'
+                    : 'grid-cols-1'
                 } min-h-[480px]`}
               >
                 {viewMode !== 'preview' && (
@@ -333,7 +331,7 @@ export const NotesPage: React.FC<NotesPageProps> = ({ notes, onRefresh }) => {
                       setContent(e.target.value);
                       setDirty(true);
                     }}
-                    placeholder="Markdown formatında yazın (# Başlık, **kalın**, `kod`, - liste)..."
+                    placeholder={t('notes.markdownPlaceholder')}
                     className="w-full h-full min-h-[420px] p-5 bg-transparent text-[#F8F4F5] font-mono-code text-sm leading-relaxed outline-none resize-none"
                   />
                 )}
@@ -351,4 +349,3 @@ export const NotesPage: React.FC<NotesPageProps> = ({ notes, onRefresh }) => {
     </div>
   );
 };
-
