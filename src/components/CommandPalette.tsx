@@ -8,6 +8,7 @@ import {
   KeyRound,
   Lock,
   Search,
+  ShoppingBag,
   Sparkles,
   StickyNote,
 } from 'lucide-react';
@@ -31,6 +32,7 @@ const KIND_META: Record<GlobalSearchResult['kind'], { label: string; icon: React
   'client-credential': { label: 'Müşteri Erişimi', icon: <KeyRound className="w-4 h-4 text-rose-400" /> },
   'client-note': { label: 'Müşteri Notu', icon: <FileText className="w-4 h-4 text-purple-300" /> },
   'client-file': { label: 'Şifreli Dosya', icon: <FileKey2 className="w-4 h-4 text-amber-300" /> },
+  deal: { label: 'İndirim Takibi', icon: <ShoppingBag className="w-4 h-4 text-emerald-300" /> },
 };
 
 export const CommandPalette: React.FC<CommandPaletteProps> = ({
@@ -117,6 +119,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     else if (r.kind === 'subscription') onNavigate('subscriptions', { id: r.id });
     else if (r.kind === 'note') onNavigate('notes', { id: r.id });
     else if (r.kind === 'event') onNavigate('calendar', { id: r.id });
+    else if (r.kind === 'deal') onNavigate('deals', { id: r.id });
     else if (r.kind === 'client') onNavigate('clients', { clientId: r.id });
     else if (r.parentId) onNavigate('clients', { clientId: r.parentId, id: r.id });
   };

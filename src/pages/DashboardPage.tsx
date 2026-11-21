@@ -1,25 +1,34 @@
-import React from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   AlertTriangle,
   ArrowRight,
   Briefcase,
   Cake,
   Calendar,
+  Coins,
   CreditCard,
+  Fuel,
   KeyRound,
+  Newspaper,
   Pin,
   ShieldCheck,
+  ShoppingBag,
   Sparkles,
   StickyNote,
+  TrendingUp,
   Upload,
 } from 'lucide-react';
+import { api } from '../api';
 import type {
   AppSettings,
   CalendarEventEntry,
   ClientVault,
+  LocalNewsSnapshot,
+  MarketsSnapshot,
   NoteEntry,
   PasswordEntry,
   SubscriptionEntry,
+  TrackedProduct,
 } from '../types';
 import type { NavPage } from '../components/Layout';
 import { auditPasswords } from '../utils/passwordUtils';
@@ -39,6 +48,7 @@ interface DashboardPageProps {
   notes: NoteEntry[];
   events: CalendarEventEntry[];
   clients: ClientVault[];
+  deals: TrackedProduct[];
   settings: AppSettings;
   onNavigate: (page: NavPage, opts?: { clientId?: string; filter?: string }) => void;
   onOpenGenerator: () => void;
@@ -50,13 +60,25 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
   notes,
   events,
   clients,
+  deals,
   settings,
   onNavigate,
   onOpenGenerator,
 }) => {
+  const [markets, setMarkets] = useState<MarketsSnapshot | null>(null);
+  const [news, setNews] = useState<LocalNewsSnapshot | null>(null);
+
+  useEffect(() => {
+    api.getMarkets(settings.fuelCity || 'hallein', false).then(setMarkets).catch(() => {});
+    api.getLocalNews(false).then(setNews).catch(() => {});
+  }, [settings.fuelCity]);
+
   const audit = auditPasswords(passwords);
   const subSummary = summarizeSubscriptions(subscriptions, settings.defaultCurrency, settings.exchangeRates);
   const today = startOfToday();
+  const dealHits = deals.filter((d) => d.currentPrice > 0 && d.targetPrice > 0 && d.currentPrice <= d.targetPrice);
+  const btc = markets?.crypto.find((c) => c.id === 'bitcoin');
+  const eth = markets?.crypto.find((c) => c.id === 'ethereum');
 
   // Unified upcoming timeline (next 45 days: birthdays, events, active subscription renewals)
   const upcomingItems = [
@@ -190,6 +212,119 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
           <div className="text-xs text-[#B8A2AA] mt-1 flex items-center justify-between">
             <span>{upcomingItems.length} yaklaşan hatırlatma</span>
             <ArrowRight className="w-3.5 h-3.5 opacity-0 group-hover:opacity-100 text-rose-300 transition-opacity" />
+          </div>
+        </button>
+      </div>
+
+      {/* Live Markets, Fuel (Hallein/Salzburg), Local News & Deals Strip */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <button
+          onClick={() => onNavigate('markets')}
+          className="pv-glass rounded-2xl p-4 text-left hover:border-rose-500/40 transition-all space-y-2.5 cursor-pointer"
+        >
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-rose-200 font-semibold flex items-center gap-1.5">
+              <TrendingUp className="w-3.5 h-3.5 text-rose-400" />
+              Canlı Piyasa & Altın
+            </span>
+            <span className="text-[#9C868E]">Detay →</span>
+          </div>
+          {markets ? (
+            <div className="grid grid-cols-3 gap-2 text-xs">
+              <div className="rounded-lg bg-black/40 p-2">
+                <div className="text-[10px] text-[#A8929A]">BTC</div>
+                <div className="font-mono-code font-bold text-white mt-0.5">
+                  {btc ? `€${Math.round(btc.eur).toLocaleString('tr-TR')}` : '—'}
+                </div>
+              </div>
+              <div className="rounded-lg bg-black/40 p-2">
+                <div className="text-[10px] text-[#A8929A]">ETH</div>
+                <div className="font-mono-code font-bold text-white mt-0.5">
+                  {eth ? `€${Math.round(eth.eur).toLocaleString('tr-TR')}` : '—'}
+                </div>
+              </div>
+              <div className="rounded-lg bg-black/40 p-2">
+                <div className="text-[10px] text-amber-200 flex items-center gap-0.5">
+                  <Coins className="w-2.5 h-2.5" /> Gram Altın
+                </div>
+                <div className="font-mono-code font-bold text-white mt-0.5">
+                  {markets.metals ? `€${markets.metals.goldGramEur.toFixed(1)}` : '—'}
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="text-xs text-[#9C868E]">Yükleniyor...</div>
+          )}
+          {markets && (
+            <div className="flex items-center justify-between text-[11px] text-[#D7C7CC] pt-1 border-t border-white/8">
+              <span className="inline-flex items-center gap-1">
+                <Fuel className="w-3 h-3 text-emerald-400" />
+                {markets.fuel.city === 'hallein' ? 'Hallein' : 'Salzburg'} Super 95:{' '}
+                <strong className="font-mono-code text-emerald-300">
+                  {markets.fuel.super95.cheapest ? `€${markets.fuel.super95.cheapest.toFixed(3)}` : '—'}
+                </strong>
+              </span>
+              <span>
+                Dizel:{' '}
+                <strong className="font-mono-code text-amber-300">
+                  {markets.fuel.diesel.cheapest ? `€${markets.fuel.diesel.cheapest.toFixed(3)}` : '—'}
+                </strong>
+              </span>
+            </div>
+          )}
+        </button>
+
+        <button
+          onClick={() => onNavigate('news')}
+          className="pv-glass rounded-2xl p-4 text-left hover:border-rose-500/40 transition-all flex flex-col justify-between gap-2 cursor-pointer"
+        >
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-rose-200 font-semibold flex items-center gap-1.5">
+              <Newspaper className="w-3.5 h-3.5 text-rose-400" />
+              Hallein & Salzburg Top 10
+            </span>
+            <span className="text-[#9C868E]">Tümü →</span>
+          </div>
+          {news && news.items.length > 0 ? (
+            <div className="space-y-1.5">
+              {news.items.slice(0, 2).map((n) => (
+                <div key={n.id} className="text-xs text-white truncate">
+                  <span className="text-rose-300 mr-1.5">•</span>
+                  {n.title}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="text-xs text-[#9C868E]">Son 24 saat haberleri yükleniyor...</div>
+          )}
+          <div className="text-[11px] text-[#A8929A]">
+            {news ? `Son 24 saatte ${news.last24hCount} bölge haberi` : 'ORF Salzburg + Bölge Basını'}
+          </div>
+        </button>
+
+        <button
+          onClick={() => onNavigate('deals')}
+          className="pv-glass rounded-2xl p-4 text-left hover:border-rose-500/40 transition-all flex flex-col justify-between gap-2 cursor-pointer"
+        >
+          <div className="flex items-center justify-between text-xs">
+            <span className="text-rose-200 font-semibold flex items-center gap-1.5">
+              <ShoppingBag className="w-3.5 h-3.5 text-rose-400" />
+              İndirim & Ürün Takibi
+            </span>
+            <span className="text-[#9C868E]">Yönet →</span>
+          </div>
+          <div className="flex items-baseline gap-3">
+            <span className="text-2xl font-bold text-white">{deals.length}</span>
+            <span className="text-xs text-[#C8B5BC]">takip edilen ürün</span>
+          </div>
+          <div className="text-xs">
+            {dealHits.length > 0 ? (
+              <span className="text-emerald-300 font-medium">
+                🎯 {dealHits.length} ürün hedef indirim fiyatına ulaştı!
+              </span>
+            ) : (
+              <span className="text-[#A8929A]">Amazon, Temu, AliExpress fiyat alarmları</span>
+            )}
           </div>
         </button>
       </div>

@@ -7,6 +7,7 @@ import authRoutes from './routes/auth.ts';
 import vaultRoutes from './routes/vault.ts';
 import clientRoutes from './routes/clients.ts';
 import settingsRoutes from './routes/settings.ts';
+import feedsRoutes from './routes/feeds.ts';
 
 const PORT = Number(process.env.PORT || 4848);
 const HOST = process.env.HOST || '127.0.0.1';
@@ -35,6 +36,7 @@ export function createApp() {
   app.use('/api/vault', vaultRoutes);
   app.use('/api/clients', clientRoutes);
   app.use('/api/settings', settingsRoutes);
+  app.use('/api/feeds', feedsRoutes);
 
   // Serve built frontend in production (single-port local app)
   const distDir = path.resolve(process.cwd(), 'dist');

@@ -47,3 +47,4 @@ echo  telefon tarayicisinda acin ve "Ana Ekrana Ekle" deyin!
 echo  (Ayarlar -> Mobil Erisim bolumunde QR kodunuz da hazirdir.)
 echo.
 pause
+

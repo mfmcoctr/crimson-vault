@@ -1,15 +1,16 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
 import { api, setUnauthorizedHandler } from './api';
-import {
-  DEFAULT_SETTINGS,
-  type AppSettings,
-  type AuthStatus,
-  type CalendarEventEntry,
-  type ClientVault,
-  type NoteEntry,
-  type PasswordEntry,
-  type SubscriptionEntry,
+import type {
+  AppSettings,
+  AuthStatus,
+  CalendarEventEntry,
+  ClientVault,
+  NoteEntry,
+  PasswordEntry,
+  SubscriptionEntry,
+  TrackedProduct,
 } from './types';
+import { DEFAULT_SETTINGS } from './types';
 import { ToastProvider, useToast } from './components/Toast';
 import { LockScreen } from './components/LockScreen';
 import { Layout, type NavPage } from './components/Layout';
@@ -21,8 +22,12 @@ import { SubscriptionsPage } from './pages/SubscriptionsPage';
 import { NotesPage } from './pages/NotesPage';
 import { CalendarPage } from './pages/CalendarPage';
 import { ClientsPage } from './pages/ClientsPage';
+import { MarketsPage } from './pages/MarketsPage';
+import { NewsPage } from './pages/NewsPage';
+import { DealsPage } from './pages/DealsPage';
 import { SettingsPage } from './pages/SettingsPage';
-import { collectActiveReminders } from './utils/dateUtils';
+import { collectActiveReminders, type ActiveReminderAlert } from './utils/dateUtils';
+import { formatCurrency } from './utils/currencyUtils';
 
 const VaultAppInner: React.FC = () => {
   const { notify } = useToast();
@@ -38,6 +43,7 @@ const VaultAppInner: React.FC = () => {
   const [notes, setNotes] = useState<NoteEntry[]>([]);
   const [events, setEvents] = useState<CalendarEventEntry[]>([]);
   const [clients, setClients] = useState<ClientVault[]>([]);
+  const [deals, setDeals] = useState<TrackedProduct[]>([]);
   const [loadingVault, setLoadingVault] = useState(false);
 
   // Modals
@@ -56,13 +62,14 @@ const VaultAppInner: React.FC = () => {
   const loadAllVaultData = useCallback(async () => {
     setLoadingVault(true);
     try {
-      const [s, p, sub, n, ev, cl] = await Promise.all([
+      const [s, p, sub, n, ev, cl, dl] = await Promise.all([
         api.getSettings(),
         api.getPasswords(),
         api.getSubscriptions(),
         api.getNotes(),
         api.getEvents(),
         api.getClients(),
+        api.getDeals(),
       ]);
       setSettings(s);
       setPasswords(p);
@@ -70,6 +77,7 @@ const VaultAppInner: React.FC = () => {
       setNotes(n);
       setEvents(ev);
       setClients(cl);
+      setDeals(dl);
     } catch {
       // handled by unauthorized handler
     } finally {
@@ -107,10 +115,21 @@ const VaultAppInner: React.FC = () => {
     return () => window.removeEventListener('keydown', onKey);
   }, [auth?.unlocked]);
 
-  const reminders = useMemo(
-    () => collectActiveReminders(events, subscriptions),
-    [events, subscriptions],
-  );
+  const reminders = useMemo<ActiveReminderAlert[]>(() => {
+    const base = collectActiveReminders(events, subscriptions);
+    const dealAlerts: ActiveReminderAlert[] = deals
+      .filter((d) => d.currentPrice > 0 && d.targetPrice > 0 && d.currentPrice <= d.targetPrice)
+      .map((d) => ({
+        id: `deal-${d.id}`,
+        source: 'deal',
+        title: `🎯 İndirim Alarmı: ${d.name}`,
+        subtitle: `${d.store} · ${formatCurrency(d.currentPrice, d.currency)} (Hedef: ${formatCurrency(d.targetPrice, d.currency)})`,
+        dateIso: d.updatedAt.slice(0, 10),
+        daysUntil: 0,
+        urgent: true,
+      }));
+    return [...dealAlerts, ...base];
+  }, [events, subscriptions, deals]);
 
   // Fire daily browser notification for urgent reminders if granted
   useEffect(() => {
@@ -134,6 +153,7 @@ const VaultAppInner: React.FC = () => {
     setNotes([]);
     setEvents([]);
     setClients([]);
+    setDeals([]);
     setSearchOpen(false);
     await checkAuth();
     notify('Kasa kilitlendi ve bellekteki anahtar temizlendi.', 'info');
@@ -189,6 +209,7 @@ const VaultAppInner: React.FC = () => {
         notes: notes.length,
         events: events.length,
         clients: clients.length,
+        deals: deals.length,
       }}
       reminders={reminders}
       onOpenSearch={() => setSearchOpen(true)}
@@ -208,6 +229,7 @@ const VaultAppInner: React.FC = () => {
               notes={notes}
               events={events}
               clients={clients}
+              deals={deals}
               settings={settings}
               onNavigate={handleNavigate}
               onOpenGenerator={() => setGenOpen(true)}
@@ -255,6 +277,16 @@ const VaultAppInner: React.FC = () => {
               clipboardClearSeconds={settings.clipboardClearSeconds}
               initialClientId={clientFocusId}
             />
+          )}
+
+          {activePage === 'markets' && (
+            <MarketsPage settings={settings} onUpdateSettings={handleUpdateSettings} />
+          )}
+
+          {activePage === 'news' && <NewsPage />}
+
+          {activePage === 'deals' && (
+            <DealsPage deals={deals} onRefresh={async () => setDeals(await api.getDeals())} />
           )}
 
           {activePage === 'settings' && (

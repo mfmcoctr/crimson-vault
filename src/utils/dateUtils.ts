@@ -117,7 +117,7 @@ export function eventOccursOnDay(event: CalendarEventEntry, year: number, monthI
 
 export interface ActiveReminderAlert {
   id: string;
-  source: 'event' | 'subscription';
+  source: 'event' | 'subscription' | 'deal';
   title: string;
   subtitle: string;
   dateIso: string;

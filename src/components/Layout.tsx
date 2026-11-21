@@ -10,13 +10,16 @@ import {
   LayoutDashboard,
   Lock,
   Menu,
+  Newspaper,
   Pause,
   Play,
   Search,
   Settings,
   Shield,
+  ShoppingBag,
   Sparkles,
   StickyNote,
+  TrendingUp,
   X,
 } from 'lucide-react';
 import type { AppSettings } from '../types';
@@ -30,6 +33,9 @@ export type NavPage =
   | 'notes'
   | 'calendar'
   | 'clients'
+  | 'markets'
+  | 'news'
+  | 'deals'
   | 'settings';
 
 interface LayoutProps {
@@ -42,6 +48,7 @@ interface LayoutProps {
     notes: number;
     events: number;
     clients: number;
+    deals: number;
   };
   reminders: ActiveReminderAlert[];
   onOpenSearch: () => void;
@@ -98,6 +105,23 @@ export const Layout: React.FC<LayoutProps> = ({
         icon: <Briefcase className="w-4 h-4" />,
         badge: counts.clients,
         accent: true,
+      },
+      {
+        id: 'markets',
+        label: 'Piyasalar & Yakıt',
+        icon: <TrendingUp className="w-4 h-4" />,
+        accent: true,
+      },
+      {
+        id: 'news',
+        label: 'Hallein / Salzburg Haber',
+        icon: <Newspaper className="w-4 h-4" />,
+      },
+      {
+        id: 'deals',
+        label: 'İndirim Takibi',
+        icon: <ShoppingBag className="w-4 h-4" />,
+        badge: counts.deals,
       },
       { id: 'settings', label: 'Ayarlar & Yedek', icon: <Settings className="w-4 h-4" /> },
     ];
@@ -294,7 +318,13 @@ export const Layout: React.FC<LayoutProps> = ({
                           key={r.id}
                           onClick={() => {
                             setNotifOpen(false);
-                            onNavigate(r.source === 'subscription' ? 'subscriptions' : 'calendar');
+                            onNavigate(
+                              r.source === 'subscription'
+                                ? 'subscriptions'
+                                : r.source === 'deal'
+                                  ? 'deals'
+                                  : 'calendar',
+                            );
                           }}
                           className="w-full px-4 py-3 text-left hover:bg-white/6 transition-colors flex items-start gap-3 cursor-pointer"
                         >

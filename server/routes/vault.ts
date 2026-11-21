@@ -13,6 +13,7 @@ import {
   listNotes,
   listPasswords,
   listSubscriptions,
+  listTrackedProducts,
   saveEvent,
   saveNote,
   savePassword,
@@ -351,6 +352,18 @@ router.get('/search', (req, res) => {
         title: cf.filename,
         subtitle: `${cname} · ${cf.category}`,
         badge: 'Şifreli Dosya',
+      });
+    }
+  }
+
+  for (const dp of listTrackedProducts(dek)) {
+    if (matches(dp.name, dp.store, dp.url, dp.notes)) {
+      results.push({
+        id: dp.id,
+        kind: 'deal',
+        title: dp.name,
+        subtitle: `${dp.store} · ${dp.currentPrice} ${dp.currency} (Hedef: ${dp.targetPrice} ${dp.currency})`,
+        badge: 'İndirim Takibi',
       });
     }
   }

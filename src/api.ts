@@ -8,10 +8,14 @@ import type {
   ClientNote,
   ClientVault,
   GlobalSearchResult,
+  LocalNewsSnapshot,
+  MarketsSnapshot,
   MobileAccessInfo,
   NoteEntry,
   PasswordEntry,
+  StoreName,
   SubscriptionEntry,
+  TrackedProduct,
 } from './types';
 
 export class ApiError extends Error {
@@ -251,5 +255,34 @@ export const api = {
       restored: Record<string, number>;
     }>('/api/settings/backup/import', { method: 'POST', body: fd });
   },
+
+  // --- Markets, Fuel, Hallein/Salzburg News & Deals ---
+  getMarkets: (city?: 'hallein' | 'salzburg', refresh = false) =>
+    request<MarketsSnapshot>(
+      `/api/feeds/markets?${new URLSearchParams({
+        ...(city ? { city } : {}),
+        ...(refresh ? { refresh: '1' } : {}),
+      }).toString()}`,
+    ),
+  getLocalNews: (refresh = false) =>
+    request<LocalNewsSnapshot>(`/api/feeds/news${refresh ? '?refresh=1' : ''}`),
+  getDeals: () => request<TrackedProduct[]>('/api/feeds/deals'),
+  inspectDealUrl: (url: string) =>
+    request<{
+      store: StoreName;
+      title: string;
+      imageUrl: string;
+      price: number | null;
+      currency: 'TRY' | 'USD' | 'EUR' | 'GBP';
+      blocked: boolean;
+      message: string;
+    }>('/api/feeds/deals/inspect', { method: 'POST', body: JSON.stringify({ url }) }),
+  createDeal: (data: Partial<TrackedProduct>) =>
+    request<TrackedProduct>('/api/feeds/deals', { method: 'POST', body: JSON.stringify(data) }),
+  updateDeal: (id: string, data: Partial<TrackedProduct>) =>
+    request<TrackedProduct>(`/api/feeds/deals/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  checkDealPrice: (id: string) =>
+    request<TrackedProduct>(`/api/feeds/deals/${id}/check`, { method: 'POST' }),
+  deleteDeal: (id: string) => request<{ ok: boolean }>(`/api/feeds/deals/${id}`, { method: 'DELETE' }),
 };
 

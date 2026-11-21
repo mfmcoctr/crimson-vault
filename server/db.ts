@@ -24,6 +24,7 @@ import {
   NoteEntry,
   PasswordEntry,
   SubscriptionEntry,
+  TrackedProduct,
 } from '../src/types.ts';
 
 export const DATA_DIR = path.resolve(process.cwd(), 'data');
@@ -136,6 +137,13 @@ function initSchema(db: DatabaseSync): void {
     CREATE TABLE IF NOT EXISTS encrypted_settings (
       id TEXT PRIMARY KEY,
       payload BLOB NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS tracked_products (
+      id TEXT PRIMARY KEY,
+      payload BLOB NOT NULL,
+      created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL
     );
   `);
@@ -369,6 +377,11 @@ export const listEvents = (dek: Buffer) => listTable<CalendarEventEntry>('calend
 export const saveEvent = (entry: CalendarEventEntry, dek: Buffer) => upsertRow('calendar_events', entry, dek);
 export const deleteEvent = (id: string) => deleteRow('calendar_events', id);
 
+// --- Tracked Products (Deals & Wishlist) ---
+export const listTrackedProducts = (dek: Buffer) => listTable<TrackedProduct>('tracked_products', dek);
+export const saveTrackedProduct = (entry: TrackedProduct, dek: Buffer) => upsertRow('tracked_products', entry, dek);
+export const deleteTrackedProduct = (id: string) => deleteRow('tracked_products', id);
+
 // --- Client Vaults ---
 export function listClients(dek: Buffer): ClientVault[] {
   const db = getDb();
@@ -502,6 +515,7 @@ export interface FullVaultSnapshot {
   subscriptions: SubscriptionEntry[];
   notes: NoteEntry[];
   events: CalendarEventEntry[];
+  trackedProducts?: TrackedProduct[];
   clients: ClientVault[];
   clientCredentials: ClientCredential[];
   clientNotes: ClientNote[];
@@ -527,6 +541,7 @@ export function exportFullVaultSnapshot(dek: Buffer): FullVaultSnapshot {
     subscriptions: listSubscriptions(dek),
     notes: listNotes(dek),
     events: listEvents(dek),
+    trackedProducts: listTrackedProducts(dek),
     clients: listTable<ClientVault>('clients', dek),
     clientCredentials: listClientCredentials(null, dek),
     clientNotes: listClientNotes(null, dek),
@@ -545,6 +560,7 @@ export function restoreVaultSnapshot(snapshot: FullVaultSnapshot, mode: 'merge' 
         DELETE FROM subscriptions;
         DELETE FROM notes;
         DELETE FROM calendar_events;
+        DELETE FROM tracked_products;
         DELETE FROM client_files;
         DELETE FROM client_notes;
         DELETE FROM client_credentials;
@@ -555,6 +571,7 @@ export function restoreVaultSnapshot(snapshot: FullVaultSnapshot, mode: 'merge' 
     for (const s of snapshot.subscriptions || []) saveSubscription(s, dek);
     for (const n of snapshot.notes || []) saveNote(n, dek);
     for (const e of snapshot.events || []) saveEvent(e, dek);
+    for (const tp of snapshot.trackedProducts || []) saveTrackedProduct(tp, dek);
     for (const c of snapshot.clients || []) {
       const { credentialCount, noteCount, fileCount, ...cleanClient } = c;
       saveClient(cleanClient, dek);

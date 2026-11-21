@@ -136,12 +136,117 @@ export interface ClientFileMeta {
   createdAt: string;
 }
 
+export type StoreName = 'Amazon' | 'Temu' | 'AliExpress' | 'MediaMarkt' | 'Geizhals' | 'Diğer';
+
+export interface PriceHistoryPoint {
+  date: string;
+  price: number;
+}
+
+export interface TrackedProduct {
+  id: string;
+  name: string;
+  store: StoreName;
+  url: string;
+  imageUrl: string;
+  currency: CurrencyCode;
+  currentPrice: number;
+  originalPrice: number;
+  targetPrice: number;
+  priceHistory: PriceHistoryPoint[];
+  lastCheckedAt: string | null;
+  lastCheckStatus: 'ok' | 'manual' | 'blocked' | 'pending';
+  lastCheckMessage: string;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CryptoAssetQuote {
+  id: string;
+  symbol: string;
+  name: string;
+  eur: number;
+  usd: number;
+  try: number;
+  change24h: number;
+}
+
+export interface FuelStationQuote {
+  id: number;
+  name: string;
+  address: string;
+  postalCode: string;
+  city: string;
+  distanceKm: number;
+  price: number;
+  open: boolean;
+  latitude: number;
+  longitude: number;
+}
+
+export interface MarketsSnapshot {
+  updatedAt: string;
+  crypto: CryptoAssetQuote[];
+  metals: {
+    goldOunceUsd: number;
+    goldOunceEur: number;
+    goldGramEur: number;
+    goldGramTry: number;
+    silverOunceUsd: number;
+    silverGramEur: number;
+    silverGramTry: number;
+  } | null;
+  fx: {
+    eurToUsd: number;
+    eurToTry: number;
+    eurToGbp: number;
+    usdToTry: number;
+    date: string;
+  } | null;
+  fuel: {
+    city: 'hallein' | 'salzburg';
+    cityLabel: string;
+    super95: {
+      cheapest: number | null;
+      average: number | null;
+      stations: FuelStationQuote[];
+    };
+    diesel: {
+      cheapest: number | null;
+      average: number | null;
+      stations: FuelStationQuote[];
+    };
+  };
+  warnings: string[];
+}
+
+export interface LocalNewsItem {
+  id: string;
+  title: string;
+  link: string;
+  source: string;
+  publishedAt: string;
+  ageHours: number;
+  region: 'Hallein' | 'Salzburg';
+  summary: string;
+}
+
+export interface LocalNewsSnapshot {
+  updatedAt: string;
+  items: LocalNewsItem[];
+  last24hCount: number;
+}
+
 export type BackgroundMode = 'default' | 'custom' | 'folder';
 export type BackgroundFit = 'cover' | 'contain';
 
 export interface AppSettings {
   defaultCurrency: CurrencyCode;
   exchangeRates: Record<CurrencyCode, number>;
+  cryptoWatchlist: string[];
+  marketCurrency: 'EUR' | 'USD' | 'TRY';
+  fuelCity: 'hallein' | 'salzburg';
   backgroundMode: BackgroundMode;
   backgroundFolderPath: string;
   slideshowIntervalSeconds: number;
@@ -227,7 +332,16 @@ export interface ArchivePreviewResponse {
 
 export interface GlobalSearchResult {
   id: string;
-  kind: 'password' | 'subscription' | 'note' | 'event' | 'client' | 'client-credential' | 'client-note' | 'client-file';
+  kind:
+    | 'password'
+    | 'subscription'
+    | 'note'
+    | 'event'
+    | 'client'
+    | 'client-credential'
+    | 'client-note'
+    | 'client-file'
+    | 'deal';
   title: string;
   subtitle: string;
   parentId?: string;
@@ -242,6 +356,9 @@ export const DEFAULT_SETTINGS: AppSettings = {
     EUR: 39.5,
     GBP: 46.2,
   },
+  cryptoWatchlist: ['bitcoin', 'ethereum', 'solana', 'binancecoin', 'ripple'],
+  marketCurrency: 'EUR',
+  fuelCity: 'hallein',
   backgroundMode: 'default',
   backgroundFolderPath: '',
   slideshowIntervalSeconds: 30,

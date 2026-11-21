@@ -6,6 +6,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import * as zip from '@zip.js/zip.js';
 import { resolveSafeFolderImage, scanImageFolder } from '../routes/settings.ts';
+import { detectStoreFromUrl, extractPublicProductMetadata, parseRssItems } from '../routes/feeds.ts';
 import {
   createEncryptedBackup,
   decryptBuffer,
@@ -233,5 +234,36 @@ test('Local folder background slideshow scanner filters images and blocks path t
   } finally {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   }
+});
+
+test('RSS news parser and product metadata extractor handle Austrian feeds and JSON-LD', () => {
+  const sampleRss = `<?xml version="1.0"?><rss><channel><item>
+    <title><![CDATA[Neue Brücke in Hallein eröffnet - Salzburger Nachrichten]]></title>
+    <link>https://example.at/hallein-bruecke</link>
+    <pubDate>${new Date().toUTCString()}</pubDate>
+    <description>Wichtige Verkehrsnews für den Tennengau.</description>
+  </item></channel></rss>`;
+
+  const items = parseRssItems(sampleRss, 'Google News');
+  assert.equal(items.length, 1);
+  assert.equal(items[0].title, 'Neue Brücke in Hallein eröffnet');
+  assert.equal(items[0].source, 'Salzburger Nachrichten');
+
+  assert.equal(detectStoreFromUrl('https://www.amazon.de/dp/B09XS7JWHH'), 'Amazon');
+  assert.equal(detectStoreFromUrl('https://www.temu.com/goods.html'), 'Temu');
+  assert.equal(detectStoreFromUrl('https://de.aliexpress.com/item/123.html'), 'AliExpress');
+
+  const sampleHtml = `<html><head>
+    <meta property="og:title" content="Sony WH-1000XM5" />
+    <script type="application/ld+json">{"@type":"Product","offers":{"price":"279,90","priceCurrency":"EUR"}}</script>
+  </head><body></body></html>`;
+  const meta = extractPublicProductMetadata(sampleHtml, 'https://www.amazon.de/dp/B09XS7JWHH');
+  assert.equal(meta.blocked, false);
+  assert.equal(meta.title, 'Sony WH-1000XM5');
+  assert.equal(meta.price, 279.9);
+  assert.equal(meta.currency, 'EUR');
+
+  const captchaHtml = '<html><body>Enter the characters you see below - Robot Check</body></html>';
+  assert.equal(extractPublicProductMetadata(captchaHtml, 'https://www.amazon.de/dp/X').blocked, true);
 });
 
