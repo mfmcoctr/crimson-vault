@@ -9,12 +9,13 @@ import clientRoutes from './routes/clients.ts';
 import settingsRoutes from './routes/settings.ts';
 
 const PORT = Number(process.env.PORT || 4848);
-const HOST = '127.0.0.1';
+const HOST = process.env.HOST || '127.0.0.1';
 
 export function createApp() {
   getDb();
 
   const app = express();
+  app.set('trust proxy', 1);
   app.disable('x-powered-by');
   app.use(express.json({ limit: '15mb' }));
 

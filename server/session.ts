@@ -6,13 +6,13 @@ export const SESSION_COOKIE_NAME = 'pv_session';
 
 interface VaultRuntimeState {
   dek: Buffer | null;
-  sessionToken: string | null;
+  sessionTokens: Set<string>;
   lastActivityAt: number;
 }
 
 const state: VaultRuntimeState = {
   dek: null,
-  sessionToken: null,
+  sessionTokens: new Set<string>(),
   lastActivityAt: Date.now(),
 };
 
@@ -39,7 +39,6 @@ export interface StagedImportData {
 const stagedImports = new Map<string, StagedImportData>();
 
 export function saveStagedImport(data: StagedImportData): void {
-  // Prune expired staging entries (> 20 minutes old)
   const cutoff = Date.now() - 20 * 60 * 1000;
   for (const [key, val] of stagedImports.entries()) {
     if (val.createdAt < cutoff) stagedImports.delete(key);
@@ -55,22 +54,38 @@ export function deleteStagedImport(stagingId: string): void {
   stagedImports.delete(stagingId);
 }
 
-export function setUnlockedSession(dek: Buffer): string {
+/**
+ * Unlocks the vault in memory and issues a new device session token.
+ * Supports multiple simultaneous devices (e.g., PC + Phone via Tailscale) staying unlocked together.
+ */
+export function setUnlockedSession(dek: Buffer, resetAllDevices = false): string {
   if (state.dek) {
     state.dek.fill(0);
   }
   state.dek = Buffer.from(dek);
-  state.sessionToken = crypto.randomBytes(32).toString('hex');
+  if (resetAllDevices) {
+    state.sessionTokens.clear();
+  }
+  const token = crypto.randomBytes(32).toString('hex');
+  state.sessionTokens.add(token);
+  // Keep reasonable cap on concurrent device tokens
+  if (state.sessionTokens.size > 16) {
+    const oldest = state.sessionTokens.values().next().value;
+    if (oldest) state.sessionTokens.delete(oldest);
+  }
   state.lastActivityAt = Date.now();
-  return state.sessionToken;
+  return token;
 }
 
+/**
+ * Immediately wipes the DEK from RAM and invalidates ALL active device sessions.
+ */
 export function lockVaultMemory(): void {
   if (state.dek) {
     state.dek.fill(0);
     state.dek = null;
   }
-  state.sessionToken = null;
+  state.sessionTokens.clear();
   stagedImports.clear();
 }
 
@@ -104,14 +119,18 @@ export function parseCookies(cookieHeader?: string): Record<string, string> {
 
 export function isRequestAuthenticated(req: Request): boolean {
   checkAutoLock();
-  if (!state.dek || !state.sessionToken) return false;
+  if (!state.dek || state.sessionTokens.size === 0) return false;
   const cookies = parseCookies(req.headers.cookie);
   const token = cookies[SESSION_COOKIE_NAME];
   if (!token) return false;
   const a = Buffer.from(token);
-  const b = Buffer.from(state.sessionToken);
-  if (a.length !== b.length) return false;
-  return crypto.timingSafeEqual(a, b);
+  for (const valid of state.sessionTokens) {
+    const b = Buffer.from(valid);
+    if (a.length === b.length && crypto.timingSafeEqual(a, b)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 export function getActiveDek(): Buffer {
@@ -129,4 +148,3 @@ export function requireUnlocked(req: Request, res: Response, next: NextFunction)
   state.lastActivityAt = Date.now();
   next();
 }
-

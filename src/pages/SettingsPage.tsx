@@ -1,20 +1,24 @@
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import {
   Bell,
   CheckCircle2,
   Coins,
+  Copy,
   Download,
   FolderOpen,
   Image as ImageIcon,
   KeyRound,
+  RefreshCw,
   RotateCcw,
   Save,
   Shield,
   Sliders,
+  Smartphone,
   Upload,
+  Wifi,
 } from 'lucide-react';
 import { api } from '../api';
-import type { AppSettings, BackgroundFit, BackgroundMode, CurrencyCode } from '../types';
+import type { AppSettings, BackgroundFit, BackgroundMode, CurrencyCode, MobileAccessInfo } from '../types';
 import { useToast } from '../components/Toast';
 
 interface SettingsPageProps {
@@ -30,9 +34,46 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
   onSettingsReplaced,
   onVaultRestored,
 }) => {
-  const { notify } = useToast();
+  const { notify, copySecret } = useToast();
   const bgInputRef = useRef<HTMLInputElement>(null);
   const backupInputRef = useRef<HTMLInputElement>(null);
+
+  // Mobile / Tailscale live info
+  const [mobileInfo, setMobileInfo] = useState<MobileAccessInfo | null>(null);
+  const [loadingMobile, setLoadingMobile] = useState(false);
+  const [enablingServe, setEnablingServe] = useState(false);
+
+  const loadMobileInfo = async () => {
+    setLoadingMobile(true);
+    try {
+      setMobileInfo(await api.getMobileAccessInfo());
+    } catch {
+      // ignore
+    } finally {
+      setLoadingMobile(false);
+    }
+  };
+
+  useEffect(() => {
+    loadMobileInfo();
+  }, []);
+
+  const handleEnableTailscaleServe = async () => {
+    setEnablingServe(true);
+    try {
+      const updated = await api.enableTailscaleServe();
+      setMobileInfo(updated);
+      if (updated.serveActive && updated.tailscaleHttpsUrl) {
+        notify(`Tailscale HTTPS tüneli açıldı: ${updated.tailscaleHttpsUrl}`);
+      } else {
+        notify('Tailscale serve komutu çalıştırıldı. Durumu kontrol edin.', 'info');
+      }
+    } catch (err) {
+      notify(err instanceof Error ? err.message : 'Tailscale serve başlatılamadı.', 'error');
+    } finally {
+      setEnablingServe(false);
+    }
+  };
 
   // Local editable rates
   const [rates, setRates] = useState(settings.exchangeRates);
@@ -220,6 +261,129 @@ export const SettingsPage: React.FC<SettingsPageProps> = ({
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Mobile Access & Tailscale HTTPS Pairing (Full Width Card) */}
+        <div className="lg:col-span-2 pv-glass-crimson rounded-2xl p-6 space-y-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div className="flex items-center gap-2.5 text-base font-semibold text-white">
+              <Smartphone className="w-5 h-5 text-rose-300" />
+              <span>Mobil Erişim & Tailscale HTTPS (Evde + Dışarıda Senkron PWA)</span>
+            </div>
+            <button
+              type="button"
+              onClick={loadMobileInfo}
+              disabled={loadingMobile}
+              className="pv-btn-secondary text-xs py-1.5"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${loadingMobile ? 'animate-spin' : ''}`} />
+              Durumu Yenile
+            </button>
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-12 gap-5 items-center">
+            <div className="md:col-span-8 space-y-3.5">
+              {/* Live Tailscale status pills */}
+              <div className="flex flex-wrap gap-2 text-xs">
+                <span
+                  className={`px-2.5 py-1 rounded-full border ${
+                    mobileInfo?.tailscaleInstalled
+                      ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/35'
+                      : 'bg-amber-500/20 text-amber-200 border-amber-400/35'
+                  }`}
+                >
+                  Tailscale: {mobileInfo ? (mobileInfo.tailscaleInstalled ? 'Kurulu ✓' : 'Kurulu Değil') : 'Kontrol ediliyor...'}
+                </span>
+                <span
+                  className={`px-2.5 py-1 rounded-full border ${
+                    mobileInfo?.tailscaleRunning
+                      ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/35'
+                      : 'bg-white/10 text-[#D7C7CC] border-white/15'
+                  }`}
+                >
+                  Oturum: {mobileInfo?.tailscaleRunning ? 'Bağlı ✓' : 'Giriş Bekleniyor'}
+                </span>
+                <span
+                  className={`px-2.5 py-1 rounded-full border ${
+                    mobileInfo?.serveActive
+                      ? 'bg-emerald-500/20 text-emerald-200 border-emerald-400/35'
+                      : 'bg-white/10 text-[#D7C7CC] border-white/15'
+                  }`}
+                >
+                  HTTPS Tünel: {mobileInfo?.serveActive ? 'Aktif ✓' : 'Kapalı'}
+                </span>
+              </div>
+
+              {mobileInfo?.tailscaleHttpsUrl ? (
+                <div className="rounded-xl bg-black/50 border border-rose-500/35 p-3.5 space-y-2.5">
+                  <div className="text-[11px] uppercase tracking-wider text-rose-200">
+                    Kişisel Mobil HTTPS Adresiniz (Evde & 4G/5G'de Geçerli)
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <code className="flex-1 font-mono-code text-sm text-white break-all">
+                      {mobileInfo.tailscaleHttpsUrl}
+                    </code>
+                    <button
+                      type="button"
+                      onClick={() => copySecret(mobileInfo.tailscaleHttpsUrl, 'Tailscale HTTPS adresi', 0)}
+                      className="pv-btn-secondary text-xs py-1.5 shrink-0"
+                    >
+                      <Copy className="w-3.5 h-3.5" />
+                      Kopyala
+                    </button>
+                  </div>
+                  {!mobileInfo.serveActive && (
+                    <button
+                      type="button"
+                      onClick={handleEnableTailscaleServe}
+                      disabled={enablingServe}
+                      className="pv-btn-primary text-xs"
+                    >
+                      <Wifi className="w-3.5 h-3.5" />
+                      {enablingServe ? 'HTTPS Tüneli Açılıyor...' : 'Tailscale HTTPS Tünelini Şimdi Aç (tailscale serve)'}
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="rounded-xl bg-black/45 border border-white/10 p-3.5 text-xs text-[#E4D5DA] space-y-2">
+                  <p>
+                    1. Bilgisayarınızda <strong className="text-white">Tailscale</strong> uygulamasını açıp Google/GitHub/Apple hesabınızla giriş yapın (veya klasördeki <code className="text-rose-200">tailscale-setup.bat</code> dosyasına çift tıklayın).
+                  </p>
+                  <p>
+                    2. Telefonunuza da <strong className="text-white">Tailscale</strong> uygulamasını (App Store / Google Play) kurup aynı hesapla giriş yapın.
+                  </p>
+                  <p>
+                    3. Yukarıdaki <strong className="text-white">Durumu Yenile</strong> düğmesine bastığınızda kişisel <code className="text-rose-200">https://...ts.net</code> adresiniz ve QR kodunuz burada hazır olacak.
+                  </p>
+                </div>
+              )}
+
+              <div className="text-[11px] text-[#D7C7CC] leading-relaxed">
+                <strong className="text-white">Telefonda Uygulama Gibi Kurma (PWA):</strong> QR kodu telefon kamerasıyla okutup linki açın →
+                Android Chrome'da <em>Menü (⋮) → Uygulamayı Yükle / Ana Ekrana Ekle</em>, iPhone Safari'de <em>Paylaş → Ana Ekrana Ekle</em> seçin.
+                PC ve telefon aynı anda açık kalarak gerçek zamanlı senkron çalışır.
+              </div>
+            </div>
+
+            {/* Scannable QR Code */}
+            <div className="md:col-span-4 flex flex-col items-center justify-center">
+              {mobileInfo?.qrSvg ? (
+                <div className="p-3 rounded-2xl bg-black/60 border border-rose-500/35 shadow-xl flex flex-col items-center gap-2">
+                  <div
+                    className="w-40 h-40 [&>svg]:w-full [&>svg]:h-full"
+                    dangerouslySetInnerHTML={{ __html: mobileInfo.qrSvg }}
+                  />
+                  <span className="text-[11px] text-rose-200 text-center">
+                    {mobileInfo.tailscaleHttpsUrl ? 'Tailscale HTTPS QR' : 'Yerel Ağ QR'}
+                  </span>
+                </div>
+              ) : (
+                <div className="w-40 h-40 rounded-2xl bg-black/40 border border-white/10 flex items-center justify-center text-xs text-[#9C868E]">
+                  QR hazırlanıyor...
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+
         {/* Appearance & Background Controls */}
         <div className="pv-glass rounded-2xl p-6 space-y-5">
           <div className="flex items-center gap-2.5 text-base font-semibold text-white">

@@ -8,6 +8,7 @@ import type {
   ClientNote,
   ClientVault,
   GlobalSearchResult,
+  MobileAccessInfo,
   NoteEntry,
   PasswordEntry,
   SubscriptionEntry,
@@ -223,6 +224,8 @@ export const api = {
     }),
   listBackgroundFolderImages: () =>
     request<{ count: number; items: { id: string; name: string }[] }>('/api/settings/background/folder/list'),
+  getMobileAccessInfo: () => request<MobileAccessInfo>('/api/settings/mobile-access'),
+  enableTailscaleServe: () => request<MobileAccessInfo>('/api/settings/mobile-access/enable-serve', { method: 'POST' }),
 
   exportBackup: async (backupPassword: string): Promise<Blob> => {
     const res = await fetch('/api/settings/backup/export', {

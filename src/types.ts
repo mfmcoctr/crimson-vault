@@ -159,6 +159,17 @@ export interface AppSettings {
   showSubscriptionsOnCalendar: boolean;
 }
 
+export interface MobileAccessInfo {
+  tailscaleInstalled: boolean;
+  tailscaleRunning: boolean;
+  tailscaleDnsName: string;
+  tailscaleHttpsUrl: string;
+  serveActive: boolean;
+  lanUrls: string[];
+  port: number;
+  qrSvg: string;
+}
+
 export interface AuthStatus {
   initialized: boolean;
   unlocked: boolean;

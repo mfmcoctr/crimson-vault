@@ -317,7 +317,32 @@ export const Layout: React.FC<LayoutProps> = ({
         </header>
 
         {/* Page Container */}
-        <main className="flex-1 p-4 sm:p-7 max-w-[1440px] w-full mx-auto">{children}</main>
+        <main className="flex-1 p-4 sm:p-7 pb-24 lg:pb-7 max-w-[1440px] w-full mx-auto">{children}</main>
+
+        {/* Mobile Bottom Navigation Bar (PWA Native App Feel) */}
+        <nav className="lg:hidden fixed bottom-0 left-0 right-0 z-40 pv-glass border-t border-white/12 px-2 pt-1.5 pb-[max(0.45rem,env(safe-area-inset-bottom))] flex items-center justify-around">
+          {[
+            { id: 'dashboard' as NavPage, label: 'Özet', icon: <LayoutDashboard className="w-5 h-5" /> },
+            { id: 'passwords' as NavPage, label: 'Şifreler', icon: <KeyRound className="w-5 h-5" /> },
+            { id: 'clients' as NavPage, label: 'Müşteri', icon: <Briefcase className="w-5 h-5" /> },
+            { id: 'calendar' as NavPage, label: 'Takvim', icon: <Calendar className="w-5 h-5" /> },
+            { id: 'settings' as NavPage, label: 'Ayarlar', icon: <Settings className="w-5 h-5" /> },
+          ].map((item) => {
+            const active = activePage === item.id;
+            return (
+              <button
+                key={item.id}
+                onClick={() => handleNav(item.id)}
+                className={`flex flex-col items-center gap-0.5 px-2.5 py-1 rounded-xl text-[10px] font-medium transition-colors cursor-pointer ${
+                  active ? 'text-rose-300 bg-[#9F1239]/25' : 'text-[#B8A2AA] hover:text-white'
+                }`}
+              >
+                {item.icon}
+                <span>{item.label}</span>
+              </button>
+            );
+          })}
+        </nav>
       </div>
     </div>
   );

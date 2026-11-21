@@ -16,15 +16,21 @@ import {
 
 const router = Router();
 
-function setSessionCookie(res: import('express').Response, token: string): void {
+function isHttpsRequest(req: import('express').Request): boolean {
+  return req.secure || req.headers['x-forwarded-proto'] === 'https';
+}
+
+function setSessionCookie(req: import('express').Request, res: import('express').Response, token: string): void {
+  const secureFlag = isHttpsRequest(req) ? '; Secure' : '';
   res.setHeader(
     'Set-Cookie',
-    `${SESSION_COOKIE_NAME}=${encodeURIComponent(token)}; HttpOnly; SameSite=Strict; Path=/`,
+    `${SESSION_COOKIE_NAME}=${encodeURIComponent(token)}; HttpOnly; SameSite=Lax; Path=/${secureFlag}`,
   );
 }
 
-function clearSessionCookie(res: import('express').Response): void {
-  res.setHeader('Set-Cookie', `${SESSION_COOKIE_NAME}=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0`);
+function clearSessionCookie(req: import('express').Request, res: import('express').Response): void {
+  const secureFlag = isHttpsRequest(req) ? '; Secure' : '';
+  res.setHeader('Set-Cookie', `${SESSION_COOKIE_NAME}=; HttpOnly; SameSite=Lax; Path=/; Max-Age=0${secureFlag}`);
 }
 
 router.get('/status', (req, res) => {
@@ -43,9 +49,9 @@ router.post('/setup', (req, res) => {
       return;
     }
     const dek = initializeVault(masterPassword);
-    const token = setUnlockedSession(dek);
+    const token = setUnlockedSession(dek, true);
     dek.fill(0);
-    setSessionCookie(res, token);
+    setSessionCookie(req, res, token);
     res.json({ ok: true, unlocked: true });
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : 'Kurulum hatası.' });
@@ -60,18 +66,18 @@ router.post('/unlock', (req, res) => {
       return;
     }
     const dek = unlockVaultWithPassword(masterPassword);
-    const token = setUnlockedSession(dek);
+    const token = setUnlockedSession(dek, false);
     dek.fill(0);
-    setSessionCookie(res, token);
+    setSessionCookie(req, res, token);
     res.json({ ok: true, unlocked: true });
   } catch (err) {
     res.status(401).json({ error: err instanceof Error ? err.message : 'Ana parola hatalı.' });
   }
 });
 
-router.post('/lock', (_req, res) => {
+router.post('/lock', (req, res) => {
   lockVaultMemory();
-  clearSessionCookie(res);
+  clearSessionCookie(req, res);
   res.json({ ok: true, unlocked: false });
 });
 
@@ -83,9 +89,9 @@ router.post('/change-password', requireUnlocked, (req, res) => {
       return;
     }
     const dek = changeMasterPassword(currentPassword, newPassword);
-    const token = setUnlockedSession(dek);
+    const token = setUnlockedSession(dek, true);
     dek.fill(0);
-    setSessionCookie(res, token);
+    setSessionCookie(req, res, token);
     res.json({ ok: true });
   } catch (err) {
     res.status(400).json({ error: err instanceof Error ? err.message : 'Parola değiştirilemedi.' });

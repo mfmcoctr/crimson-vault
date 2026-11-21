@@ -1,7 +1,11 @@
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import { Router } from 'express';
 import multer from 'multer';
+import QRCode from 'qrcode';
 import {
   createEncryptedBackup,
   decryptEncryptedBackup,
@@ -18,7 +22,9 @@ import {
   type FullVaultSnapshot,
 } from '../db.ts';
 import { getActiveDek, requireUnlocked } from '../session.ts';
-import type { AppSettings } from '../../src/types.ts';
+import type { AppSettings, MobileAccessInfo } from '../../src/types.ts';
+
+const execFileAsync = promisify(execFile);
 
 const router = Router();
 const upload = multer({
@@ -244,6 +250,120 @@ router.get('/background/folder/image', (req, res) => {
   res.setHeader('Content-Type', resolved.mimeType);
   res.setHeader('Cache-Control', 'private, max-age=300');
   res.sendFile(resolved.fullPath);
+});
+
+// --- Mobile Access & Tailscale HTTPS Status + QR Code ---
+function resolveTailscaleBinary(): string | null {
+  const winDefault = 'C:\\Program Files\\Tailscale\\tailscale.exe';
+  if (process.platform === 'win32' && fs.existsSync(winDefault)) {
+    return winDefault;
+  }
+  return 'tailscale';
+}
+
+function getLocalLanUrls(port: number): string[] {
+  const urls: string[] = [];
+  const ifaces = os.networkInterfaces();
+  for (const list of Object.values(ifaces)) {
+    if (!list) continue;
+    for (const addr of list) {
+      if (addr.family === 'IPv4' && !addr.internal && !addr.address.startsWith('169.254.')) {
+        urls.push(`http://${addr.address}:${port}`);
+      }
+    }
+  }
+  return urls;
+}
+
+async function inspectMobileAccess(port: number): Promise<MobileAccessInfo> {
+  const tsBin = resolveTailscaleBinary();
+  let tailscaleInstalled = false;
+  let tailscaleRunning = false;
+  let tailscaleDnsName = '';
+  let serveActive = false;
+
+  if (tsBin) {
+    try {
+      const { stdout } = await execFileAsync(tsBin, ['status', '--json'], { timeout: 3500 });
+      tailscaleInstalled = true;
+      const parsed = JSON.parse(stdout || '{}');
+      tailscaleRunning = parsed.BackendState === 'Running';
+      const rawDns = String(parsed?.Self?.DNSName || '').replace(/\.$/, '');
+      if (rawDns) tailscaleDnsName = rawDns;
+    } catch (err: unknown) {
+      const code = (err as NodeJS.ErrnoException)?.code;
+      // ENOENT means binary not installed; non-zero exit (e.g. stopped/logged out) still means installed
+      if (code !== 'ENOENT') {
+        tailscaleInstalled = true;
+      }
+    }
+
+    if (tailscaleRunning) {
+      try {
+        const { stdout } = await execFileAsync(tsBin, ['serve', 'status', '--json'], { timeout: 3500 });
+        const serveJson = JSON.parse(stdout || '{}');
+        const webObj = serveJson?.Web || {};
+        for (const hostCfg of Object.values(webObj) as { Handlers?: Record<string, { Proxy?: string }> }[]) {
+          for (const handler of Object.values(hostCfg?.Handlers || {})) {
+            if (String(handler?.Proxy || '').includes(`:${port}`)) {
+              serveActive = true;
+            }
+          }
+        }
+      } catch {
+        // serve not configured yet
+      }
+    }
+  }
+
+  const tailscaleHttpsUrl = tailscaleDnsName ? `https://${tailscaleDnsName}` : '';
+  const lanUrls = getLocalLanUrls(port);
+  const qrTarget = tailscaleHttpsUrl || lanUrls[0] || `http://127.0.0.1:${port}`;
+
+  let qrSvg = '';
+  try {
+    qrSvg = await QRCode.toString(qrTarget, {
+      type: 'svg',
+      margin: 2,
+      color: { dark: '#F8F4F5', light: '#00000000' },
+    });
+  } catch {
+    qrSvg = '';
+  }
+
+  return {
+    tailscaleInstalled,
+    tailscaleRunning,
+    tailscaleDnsName,
+    tailscaleHttpsUrl,
+    serveActive,
+    lanUrls,
+    port,
+    qrSvg,
+  };
+}
+
+router.get('/mobile-access', async (_req, res) => {
+  const port = Number(process.env.PORT || 4848);
+  res.json(await inspectMobileAccess(port));
+});
+
+router.post('/mobile-access/enable-serve', async (_req, res) => {
+  const port = Number(process.env.PORT || 4848);
+  const tsBin = resolveTailscaleBinary();
+  if (!tsBin) {
+    res.status(400).json({ error: 'Tailscale bu bilgisayarda kurulu değil.' });
+    return;
+  }
+  try {
+    await execFileAsync(tsBin, ['serve', '--bg', `http://127.0.0.1:${port}`], { timeout: 10000 });
+    res.json(await inspectMobileAccess(port));
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : 'Tailscale serve başlatılamadı.';
+    res.status(400).json({
+      error: `Tailscale HTTPS tüneli açılamadı. Tailscale uygulamasında oturumunuzun açık olduğundan ve Tailscale yönetim panelinde MagicDNS + HTTPS'in etkin olduğundan emin olun. (${msg})`,
+    });
+  }
 });
 
 // --- Encrypted Full Vault Backup (.pvault) ---

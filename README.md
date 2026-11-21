@@ -31,3 +31,13 @@ Geliştirme modu (hot-reload):
 npm run dev
 ```
 
+## Mobil Kullanım (Evde + Dışarıda Senkron PWA — Tailscale HTTPS)
+
+PersonVault tam ekran **PWA (Ana Ekrana Ekle)** ve çoklu cihaz oturumu (PC + Telefon aynı anda açık) destekler:
+
+1. Windows'ta [tailscale-setup.bat](tailscale-setup.bat) dosyasını çalıştırın (Tailscale'i kurar, oturum açtırır ve `tailscale serve --bg http://127.0.0.1:4848` ile otomatik HTTPS tünelini etkinleştirir).
+2. Telefonunuza da ücretsiz **Tailscale** uygulamasını (iOS / Android) kurup aynı hesapla giriş yapın.
+3. Uygulamada **Ayarlar & Yedek → Mobil Erişim & Tailscale HTTPS** bölümündeki QR kodu telefonunuzla okutup tarayıcıdan **"Ana Ekrana Ekle"** deyin.
+4. Evde Wi-Fi'da ve dışarıda 4G/5G'de aynı şifreli kasaya gerçek zamanlı erişin.
+
+

@@ -34,15 +34,30 @@ export const ToastProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const copySecret = useCallback(
     async (value: string, label: string, clearAfterSeconds = 0) => {
       try {
-        await navigator.clipboard.writeText(value);
+        if (navigator.clipboard && window.isSecureContext) {
+          await navigator.clipboard.writeText(value);
+        } else {
+          // Fallback for plain HTTP local network access on mobile
+          const ta = document.createElement('textarea');
+          ta.value = value;
+          ta.style.position = 'fixed';
+          ta.style.opacity = '0';
+          document.body.appendChild(ta);
+          ta.focus();
+          ta.select();
+          document.execCommand('copy');
+          document.body.removeChild(ta);
+        }
         if (clearAfterSeconds > 0) {
           notify(`${label} panoya kopyalandı (${clearAfterSeconds} sn sonra temizlenecek)`, 'success');
           if (clearTimerRef.current) window.clearTimeout(clearTimerRef.current);
           clearTimerRef.current = window.setTimeout(async () => {
             try {
-              const current = await navigator.clipboard.readText();
-              if (current === value) {
-                await navigator.clipboard.writeText('');
+              if (navigator.clipboard && window.isSecureContext) {
+                const current = await navigator.clipboard.readText();
+                if (current === value) {
+                  await navigator.clipboard.writeText('');
+                }
               }
             } catch {
               // ignore permission loss when unfocused
