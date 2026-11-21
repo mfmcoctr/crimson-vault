@@ -1,0 +1,33 @@
+# PersonVault — Crimson Sanctum
+
+Yerel olarak çalışan, tüm hassas verilerinizi **AES-256-GCM + scrypt** ile şifrelenmiş yerel bir SQLite veritabanında (`data/personvault.db`) saklayan kişisel ve müşteri kasası uygulaması.
+
+## Özellikler
+
+- **Şifre Kasası:** AES-256-GCM şifreli parola saklama, özel alanlar, zayıf/tekrarlanan şifre güvenlik analizi, rastgele & kelime bazlı (Passphrase) güçlü şifre üretici, tek tıkla kopyalama ve otomatik pano temizleme.
+- **Abonelik Takibi:** TRY/USD/EUR/GBP çoklu para birimi, Ayarlar'dan düzenlenebilir döviz kurlarıyla aylık/yıllık toplam maliyet özeti, kategori dağılımı ve tek tıkla dönem ilerletme.
+- **Güvenli Markdown Notlar:** Bölünmüş canlı önizleme, etiketler, sabitleme, `Ctrl+S` hızlı kaydetme.
+- **Akıllı Takvim & Hatırlatmalar:** Doğum günlerinde otomatik yaş hesabı, yıllık/aylık tekrar, yaklaşan günler geri sayımı, takvim üzerinde abonelik yenilemeleri ve uygulama içi + tarayıcı bildirimleri.
+- **Müşteri Kasaları & Toplu ZIP / Arşiv İçe Aktarma:**
+  - Her web sitesi müşterisi için izole kasa (Erişim Bilgileri, Notlar/`.env`, AES-256-GCM Şifreli Dosyalar).
+  - Parola korumalı (ZipCrypto & AES-256) ve standart `.zip` arşivlerini, Chrome/Bitwarden/1Password `.csv`/`.json` listelerini, `.env`, `.txt`/`.md`, `.pem`/`.ppk`/`.crt`/`.key` dosyalarını bellekte ayrıştırır, önizleme sunar ve hedef müşteri kasasına şifreleyerek kaydeder.
+  - Müşteri kasasını parola korumalı AES-256 ZIP olarak dışa aktarma.
+- **Evrensel Arama (`Ctrl+K`) & Tam Şifreli Yedekleme (`.pvault`):** Tüm kasa içinde anında arama ve parola korumalı tam kasa yedek alma/geri yükleme.
+- **Koyu Kırmızı & Beyaz Dark Fantasy Tasarım:** Göz yormayan buzlu cam kartlar, Ayarlar'dan canlı ayarlanabilen arka plan opaklığı/bulanıklığı ve özel arka plan görseli yükleme.
+
+## Çalıştırma
+
+### Tek Tıkla (Windows)
+`start.bat` dosyasına çift tıklayın — uygulama otomatik olarak derlenir, yerel sunucu `http://127.0.0.1:4848` adresinde başlar ve tarayıcıda açılır.
+
+### Terminalden
+```bash
+npm install
+npm run build
+npm start
+```
+Geliştirme modu (hot-reload):
+```bash
+npm run dev
+```
+
