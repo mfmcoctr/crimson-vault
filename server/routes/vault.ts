@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { newId } from '../crypto.ts';
 import {
   deleteEvent,
+  deleteFreecashOffer,
   deleteNote,
   deletePassword,
   deleteSubscription,
@@ -10,11 +11,13 @@ import {
   listClientNotes,
   listClients,
   listEvents,
+  listFreecashOffers,
   listNotes,
   listPasswords,
   listSubscriptions,
   listTrackedProducts,
   saveEvent,
+  saveFreecashOffer,
   saveNote,
   savePassword,
   saveSubscription,
@@ -22,6 +25,7 @@ import {
 import { getActiveDek, requireUnlocked } from '../session.ts';
 import type {
   CalendarEventEntry,
+  FreecashOffer,
   GlobalSearchResult,
   NoteEntry,
   PasswordEntry,
@@ -239,6 +243,81 @@ router.delete('/events/:id', (req, res) => {
   res.json({ ok: deleteEvent(req.params.id) });
 });
 
+// --- Freecash Offers & Milestones ---
+router.get('/freecash', (_req, res) => {
+  res.json(listFreecashOffers(getActiveDek()));
+});
+
+router.post('/freecash', (req, res) => {
+  const dek = getActiveDek();
+  const body = req.body as Partial<FreecashOffer>;
+  if (!body.gameName?.trim()) {
+    res.status(400).json({ error: 'Görev / oyun adı zorunludur.' });
+    return;
+  }
+  const now = new Date().toISOString();
+  const todayIso = now.slice(0, 10);
+  const entry: FreecashOffer = {
+    id: newId(),
+    gameName: body.gameName.trim(),
+    platform: body.platform || 'Android',
+    offerWall: body.offerWall || 'Freecash Exclusive',
+    currency: body.currency || 'EUR',
+    startedAt: body.startedAt || todayIso,
+    deadlineAt: body.deadlineAt || todayIso,
+    remindDaysBefore: Number(body.remindDaysBefore ?? 3),
+    status: body.status || 'active',
+    milestones: Array.isArray(body.milestones)
+      ? body.milestones.map((m) => ({
+          id: m.id || newId(),
+          title: m.title || 'Aşama',
+          reward: Number(m.reward) || 0,
+          deadlineAt: m.deadlineAt || undefined,
+          completed: Boolean(m.completed),
+          completedAt: m.completedAt,
+        }))
+      : [],
+    url: body.url || '',
+    notes: body.notes || '',
+    createdAt: now,
+    updatedAt: now,
+  };
+  res.status(201).json(saveFreecashOffer(entry, dek));
+});
+
+router.put('/freecash/:id', (req, res) => {
+  const dek = getActiveDek();
+  const existing = listFreecashOffers(dek).find((f) => f.id === req.params.id);
+  if (!existing) {
+    res.status(404).json({ error: 'Freecash görevi bulunamadı.' });
+    return;
+  }
+  const body = req.body as Partial<FreecashOffer>;
+  const updated: FreecashOffer = {
+    ...existing,
+    ...body,
+    remindDaysBefore: body.remindDaysBefore !== undefined ? Number(body.remindDaysBefore) : existing.remindDaysBefore,
+    milestones: Array.isArray(body.milestones)
+      ? body.milestones.map((m) => ({
+          id: m.id || newId(),
+          title: m.title || 'Aşama',
+          reward: Number(m.reward) || 0,
+          deadlineAt: m.deadlineAt || undefined,
+          completed: Boolean(m.completed),
+          completedAt: m.completedAt,
+        }))
+      : existing.milestones,
+    id: existing.id,
+    createdAt: existing.createdAt,
+    updatedAt: new Date().toISOString(),
+  };
+  res.json(saveFreecashOffer(updated, dek));
+});
+
+router.delete('/freecash/:id', (req, res) => {
+  res.json({ ok: deleteFreecashOffer(req.params.id) });
+});
+
 // --- Universal Global Search (Ctrl+K) ---
 router.get('/search', (req, res) => {
   const q = String(req.query.q || '')
@@ -364,6 +443,20 @@ router.get('/search', (req, res) => {
         title: dp.name,
         subtitle: `${dp.store} · ${dp.currentPrice} ${dp.currency} (Hedef: ${dp.targetPrice} ${dp.currency})`,
         badge: 'İndirim Takibi',
+      });
+    }
+  }
+
+  for (const fc of listFreecashOffers(dek)) {
+    if (matches(fc.gameName, fc.platform, fc.offerWall, fc.notes)) {
+      const earned = fc.milestones.filter((m) => m.completed).reduce((s, m) => s + m.reward, 0);
+      const total = fc.milestones.reduce((s, m) => s + m.reward, 0);
+      results.push({
+        id: fc.id,
+        kind: 'freecash',
+        title: fc.gameName,
+        subtitle: `${fc.platform} · ${earned.toFixed(2)}/${total.toFixed(2)} ${fc.currency} · Son: ${fc.deadlineAt}`,
+        badge: 'Freecash',
       });
     }
   }

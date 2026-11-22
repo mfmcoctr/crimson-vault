@@ -246,6 +246,35 @@ export interface LocalNewsSnapshot {
   last24hCount: number;
 }
 
+export type FreecashPlatform = 'Android' | 'iOS' | 'PC' | 'Web';
+export type FreecashStatus = 'active' | 'pending_payout' | 'completed' | 'expired';
+
+export interface FreecashMilestone {
+  id: string;
+  title: string;
+  reward: number;
+  deadlineAt?: string; // optional YYYY-MM-DD
+  completed: boolean;
+  completedAt?: string;
+}
+
+export interface FreecashOffer {
+  id: string;
+  gameName: string;
+  platform: FreecashPlatform;
+  offerWall: string;
+  currency: CurrencyCode;
+  startedAt: string; // YYYY-MM-DD
+  deadlineAt: string; // YYYY-MM-DD
+  remindDaysBefore: number;
+  status: FreecashStatus;
+  milestones: FreecashMilestone[];
+  url: string;
+  notes: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
 export interface WeatherDailyForecast {
   date: string;
   weatherCode: number;
@@ -374,7 +403,8 @@ export interface GlobalSearchResult {
     | 'client-credential'
     | 'client-note'
     | 'client-file'
-    | 'deal';
+    | 'deal'
+    | 'freecash';
   title: string;
   subtitle: string;
   parentId?: string;

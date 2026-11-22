@@ -6,6 +6,7 @@ import {
   ChevronLeft,
   ChevronRight,
   CreditCard,
+  Gamepad2,
   KeyRound,
   LayoutDashboard,
   Lock,
@@ -38,6 +39,7 @@ export type NavPage =
   | 'markets'
   | 'news'
   | 'deals'
+  | 'freecash'
   | 'settings';
 
 interface LayoutProps {
@@ -51,6 +53,7 @@ interface LayoutProps {
     events: number;
     clients: number;
     deals: number;
+    freecash: number;
   };
   reminders: ActiveReminderAlert[];
   onOpenSearch: () => void;
@@ -127,6 +130,13 @@ export const Layout: React.FC<LayoutProps> = ({
       label: t('nav.deals'),
       icon: <ShoppingBag className="w-4 h-4" />,
       badge: counts.deals,
+    },
+    {
+      id: 'freecash',
+      label: 'Freecash',
+      icon: <Gamepad2 className="w-4 h-4" />,
+      badge: counts.freecash,
+      accent: true,
     },
     { id: 'settings', label: t('nav.settings'), icon: <Settings className="w-4 h-4" /> },
   ];
@@ -334,7 +344,9 @@ export const Layout: React.FC<LayoutProps> = ({
                                 ? 'subscriptions'
                                 : r.source === 'deal'
                                   ? 'deals'
-                                  : 'calendar',
+                                  : r.source === 'freecash'
+                                    ? 'freecash'
+                                    : 'calendar',
                             );
                           }}
                           className="w-full px-4 py-3 text-left hover:bg-white/6 transition-colors flex items-start gap-3 cursor-pointer"

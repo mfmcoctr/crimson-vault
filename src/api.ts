@@ -7,6 +7,7 @@ import type {
   ClientFileMeta,
   ClientNote,
   ClientVault,
+  FreecashOffer,
   GlobalSearchResult,
   LocalNewsSnapshot,
   MarketsSnapshot,
@@ -119,6 +120,14 @@ export const api = {
   updateEvent: (id: string, data: Partial<CalendarEventEntry>) =>
     request<CalendarEventEntry>(`/api/vault/events/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
   deleteEvent: (id: string) => request<{ ok: boolean }>(`/api/vault/events/${id}`, { method: 'DELETE' }),
+
+  // --- Freecash Offers ---
+  getFreecashOffers: () => request<FreecashOffer[]>('/api/vault/freecash'),
+  createFreecashOffer: (data: Partial<FreecashOffer>) =>
+    request<FreecashOffer>('/api/vault/freecash', { method: 'POST', body: JSON.stringify(data) }),
+  updateFreecashOffer: (id: string, data: Partial<FreecashOffer>) =>
+    request<FreecashOffer>(`/api/vault/freecash/${id}`, { method: 'PUT', body: JSON.stringify(data) }),
+  deleteFreecashOffer: (id: string) => request<{ ok: boolean }>(`/api/vault/freecash/${id}`, { method: 'DELETE' }),
 
   // --- Global Search ---
   searchGlobal: (q: string) => request<GlobalSearchResult[]>(`/api/vault/search?q=${encodeURIComponent(q)}`),

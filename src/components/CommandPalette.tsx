@@ -5,6 +5,7 @@ import {
   CreditCard,
   FileKey2,
   FileText,
+  Gamepad2,
   KeyRound,
   Lock,
   Search,
@@ -34,6 +35,7 @@ const KIND_META: Record<GlobalSearchResult['kind'], { labelKey: TranslationKey; 
   'client-note': { labelKey: 'cmd.kind.client-note', icon: <FileText className="w-4 h-4 text-purple-300" /> },
   'client-file': { labelKey: 'cmd.kind.client-file', icon: <FileKey2 className="w-4 h-4 text-amber-300" /> },
   deal: { labelKey: 'cmd.kind.deal', icon: <ShoppingBag className="w-4 h-4 text-emerald-300" /> },
+  freecash: { labelKey: 'cmd.kind.deal', icon: <Gamepad2 className="w-4 h-4 text-emerald-400" /> },
 };
 
 export const CommandPalette: React.FC<CommandPaletteProps> = ({
@@ -122,6 +124,7 @@ export const CommandPalette: React.FC<CommandPaletteProps> = ({
     else if (r.kind === 'note') onNavigate('notes', { id: r.id });
     else if (r.kind === 'event') onNavigate('calendar', { id: r.id });
     else if (r.kind === 'deal') onNavigate('deals', { id: r.id });
+    else if (r.kind === 'freecash') onNavigate('freecash', { id: r.id });
     else if (r.kind === 'client') onNavigate('clients', { clientId: r.id });
     else if (r.parentId) onNavigate('clients', { clientId: r.parentId, id: r.id });
   };

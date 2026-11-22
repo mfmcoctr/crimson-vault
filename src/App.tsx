@@ -6,6 +6,7 @@ import type {
   AuthStatus,
   CalendarEventEntry,
   ClientVault,
+  FreecashOffer,
   NoteEntry,
   PasswordEntry,
   SubscriptionEntry,
@@ -27,8 +28,9 @@ import { ClientsPage } from './pages/ClientsPage';
 import { MarketsPage } from './pages/MarketsPage';
 import { NewsPage } from './pages/NewsPage';
 import { DealsPage } from './pages/DealsPage';
+import { FreecashPage } from './pages/FreecashPage';
 import { SettingsPage } from './pages/SettingsPage';
-import { collectActiveReminders, type ActiveReminderAlert } from './utils/dateUtils';
+import { collectActiveReminders, daysBetween, startOfToday, parseIsoDate, type ActiveReminderAlert } from './utils/dateUtils';
 import { formatCurrency } from './utils/currencyUtils';
 
 const VaultAppInner: React.FC = () => {
@@ -47,6 +49,7 @@ const VaultAppInner: React.FC = () => {
   const [events, setEvents] = useState<CalendarEventEntry[]>([]);
   const [clients, setClients] = useState<ClientVault[]>([]);
   const [deals, setDeals] = useState<TrackedProduct[]>([]);
+  const [freecashOffers, setFreecashOffers] = useState<FreecashOffer[]>([]);
   const [loadingVault, setLoadingVault] = useState(false);
 
   // Modals
@@ -65,7 +68,7 @@ const VaultAppInner: React.FC = () => {
   const loadAllVaultData = useCallback(async () => {
     setLoadingVault(true);
     try {
-      const [s, p, sub, n, ev, cl, dl] = await Promise.all([
+      const [s, p, sub, n, ev, cl, dl, fc] = await Promise.all([
         api.getSettings(),
         api.getPasswords(),
         api.getSubscriptions(),
@@ -73,6 +76,7 @@ const VaultAppInner: React.FC = () => {
         api.getEvents(),
         api.getClients(),
         api.getDeals(),
+        api.getFreecashOffers(),
       ]);
       setSettings(s);
       if (s.language && !window.localStorage.getItem('pv_lang')) {
@@ -84,6 +88,7 @@ const VaultAppInner: React.FC = () => {
       setEvents(ev);
       setClients(cl);
       setDeals(dl);
+      setFreecashOffers(fc);
     } catch {
       // handled by unauthorized handler
     } finally {
@@ -138,8 +143,28 @@ const VaultAppInner: React.FC = () => {
         daysUntil: 0,
         urgent: true,
       }));
-    return [...dealAlerts, ...base];
-  }, [events, subscriptions, deals, lang, t, storeLabel]);
+    const fcAlerts: ActiveReminderAlert[] = [];
+    const today = startOfToday();
+    for (const fc of freecashOffers) {
+      if (fc.status !== 'active') continue;
+      const daysLeft = daysBetween(today, parseIsoDate(fc.deadlineAt));
+      if (daysLeft >= 0 && daysLeft <= (fc.remindDaysBefore ?? 3)) {
+        const remainingReward = fc.milestones
+          .filter((m) => !m.completed)
+          .reduce((s, m) => s + m.reward, 0);
+        fcAlerts.push({
+          id: `fc-${fc.id}`,
+          source: 'freecash',
+          title: `🎮 Freecash: ${fc.gameName}`,
+          subtitle: `${daysLeft === 0 ? 'Son gün!' : `${daysLeft} gün kaldı`} · ${formatCurrency(remainingReward, fc.currency, lang)}`,
+          dateIso: fc.deadlineAt,
+          daysUntil: daysLeft,
+          urgent: daysLeft <= 1,
+        });
+      }
+    }
+    return [...dealAlerts, ...fcAlerts, ...base];
+  }, [events, subscriptions, deals, freecashOffers, lang, t, storeLabel]);
 
   // Fire daily browser notification for urgent reminders if granted
   useEffect(() => {
@@ -164,6 +189,7 @@ const VaultAppInner: React.FC = () => {
     setEvents([]);
     setClients([]);
     setDeals([]);
+    setFreecashOffers([]);
     setSearchOpen(false);
     await checkAuth();
     notify(t('app.lockedToast'), 'info');
@@ -227,6 +253,7 @@ const VaultAppInner: React.FC = () => {
         events: events.length,
         clients: clients.length,
         deals: deals.length,
+        freecash: freecashOffers.filter((f) => f.status === 'active').length,
       }}
       reminders={reminders}
       onOpenSearch={() => setSearchOpen(true)}
@@ -307,6 +334,13 @@ const VaultAppInner: React.FC = () => {
 
           {activePage === 'deals' && (
             <DealsPage deals={deals} onRefresh={async () => setDeals(await api.getDeals())} />
+          )}
+
+          {activePage === 'freecash' && (
+            <FreecashPage
+              offers={freecashOffers}
+              onRefresh={async () => setFreecashOffers(await api.getFreecashOffers())}
+            />
           )}
 
           {activePage === 'settings' && (
