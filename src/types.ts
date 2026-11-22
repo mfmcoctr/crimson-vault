@@ -233,6 +233,7 @@ export interface LocalNewsItem {
   region: string;
   isPrimaryRegion: boolean;
   summary: string;
+  imageUrl?: string;
 }
 
 export interface LocalNewsSnapshot {

@@ -283,9 +283,31 @@ export const NewsPage: React.FC<NewsPageProps> = ({ settings, onUpdateSettings }
                 key={news.id}
                 className="pv-glass rounded-2xl p-4 sm:p-5 hover:border-rose-500/40 transition-all flex flex-col sm:flex-row sm:items-center gap-4"
               >
-                <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#9F1239]/80 to-[#2B0711] border border-rose-400/35 flex items-center justify-center font-display font-bold text-white text-base shrink-0">
-                  {String(idx + 1).padStart(2, '0')}
-                </div>
+                {news.imageUrl ? (
+                  <a
+                    href={news.link}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="relative w-full sm:w-28 h-40 sm:h-20 rounded-xl overflow-hidden border border-white/15 shrink-0 bg-black/50 group"
+                  >
+                    <img
+                      src={news.imageUrl}
+                      alt={news.title}
+                      loading="lazy"
+                      className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
+                      onError={(e) => {
+                        (e.currentTarget as HTMLImageElement).style.display = 'none';
+                      }}
+                    />
+                    <span className="absolute top-1.5 left-1.5 px-1.5 py-0.5 rounded-md bg-black/75 border border-rose-400/40 font-display text-[10px] font-bold text-white">
+                      {String(idx + 1).padStart(2, '0')}
+                    </span>
+                  </a>
+                ) : (
+                  <div className="w-11 h-11 rounded-xl bg-gradient-to-br from-[#9F1239]/80 to-[#2B0711] border border-rose-400/35 flex items-center justify-center font-display font-bold text-white text-base shrink-0">
+                    {String(idx + 1).padStart(2, '0')}
+                  </div>
+                )}
 
                 <div className="flex-1 min-w-0 space-y-1.5">
                   <div className="flex flex-wrap items-center gap-2 text-[11px]">

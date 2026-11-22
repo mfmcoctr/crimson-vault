@@ -422,8 +422,9 @@ export function parseRssItems(xml: string, fallbackSource: string): {
   source: string;
   pubDateMs: number;
   summary: string;
+  imageUrl?: string;
 }[] {
-  const items: { title: string; link: string; source: string; pubDateMs: number; summary: string }[] = [];
+  const items: { title: string; link: string; source: string; pubDateMs: number; summary: string; imageUrl?: string }[] = [];
   const matches = xml.match(/<item\b[\s\S]*?<\/item>/gi) || [];
   for (const block of matches) {
     let title = extractTag(block, 'title');
@@ -431,6 +432,11 @@ export function parseRssItems(xml: string, fallbackSource: string): {
     let source = extractTag(block, 'source') || fallbackSource;
     const pubDateStr = extractTag(block, 'pubDate') || extractTag(block, 'dc:date');
     const description = extractTag(block, 'description');
+
+    const imgMatch =
+      block.match(/<media:(?:content|thumbnail)[^>]+url=["']([^"']+)["']/i) ||
+      block.match(/<enclosure[^>]+type=["']image\/[^"']+["'][^>]+url=["']([^"']+)["']/i);
+    const imageUrl = imgMatch?.[1] ? decodeXmlEntities(imgMatch[1]) : undefined;
 
     // Google News appends " - Source Name" to title; separate cleanly
     const dashIdx = title.lastIndexOf(' - ');
@@ -454,7 +460,74 @@ export function parseRssItems(xml: string, fallbackSource: string): {
       /^https?:\/\//i.test(description);
     const cleanSummary = isRedundant ? '' : description.slice(0, 220);
 
-    items.push({ title, link, source, pubDateMs, summary: cleanSummary });
+    items.push({ title, link, source, pubDateMs, summary: cleanSummary, imageUrl });
+  }
+  return items;
+}
+
+export function parseSalzburg24Articles(html: string): {
+  title: string;
+  link: string;
+  source: string;
+  pubDateMs: number;
+  summary: string;
+  imageUrl?: string;
+}[] {
+  const items: { title: string; link: string; source: string; pubDateMs: number; summary: string; imageUrl?: string }[] = [];
+  const articles = html.match(/<article\b[\s\S]*?<\/article>/gi) || [];
+  const now = Date.now();
+
+  for (const art of articles) {
+    const headMatch = art.match(/<h[23][^>]*class=["'][^"']*headline[^"']*["'][^>]*>\s*<a[^>]+href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/i);
+    if (!headMatch) continue;
+    const rawHref = headMatch[1].trim();
+    const title = decodeXmlEntities(headMatch[2]);
+    if (!title || !rawHref) continue;
+
+    const link = rawHref.startsWith('http')
+      ? rawHref
+      : `https://www.salzburg24.at${rawHref.startsWith('/') ? '' : '/'}${rawHref}`;
+
+    const imgMatch =
+      art.match(/<img[^>]+src=["']([^"']+\.(?:jpg|jpeg|png|webp)[^"']*)["']/i) ||
+      art.match(/<img[^>]+data-src=["']([^"']+\.(?:jpg|jpeg|png|webp)[^"']*)["']/i);
+    let imageUrl = imgMatch?.[1] ? decodeXmlEntities(imgMatch[1]) : undefined;
+    if (imageUrl && imageUrl.startsWith('/')) {
+      imageUrl = `https://www.salzburg24.at${imageUrl}`;
+    }
+
+    const dachMatch = art.match(/<div[^>]*class=["'][^"']*dachzeile[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
+    const summary = dachMatch ? decodeXmlEntities(dachMatch[1]) : '';
+
+    const timeMatch = art.match(/<div[^>]*class=["'][^"']*badge[^"']*time[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
+    const timeText = timeMatch ? decodeXmlEntities(timeMatch[1]) : '';
+    let pubDateMs = now;
+    const dmy = timeText.match(/^(\d{1,2})\.(\d{1,2})\.(\d{4})$/);
+    const hm = timeText.match(/^(\d{1,2}):(\d{2})$/);
+    const vorStd = timeText.match(/vor\s+(\d+)\s*Std/i);
+    const vorMin = timeText.match(/vor\s+(\d+)\s*Min/i);
+    if (dmy) {
+      const parsed = new Date(Number(dmy[3]), Number(dmy[2]) - 1, Number(dmy[1]), 12, 0, 0).getTime();
+      if (!Number.isNaN(parsed)) pubDateMs = parsed;
+    } else if (hm) {
+      const d = new Date();
+      d.setHours(Number(hm[1]), Number(hm[2]), 0, 0);
+      if (d.getTime() > now) d.setDate(d.getDate() - 1);
+      pubDateMs = d.getTime();
+    } else if (vorStd) {
+      pubDateMs = now - Number(vorStd[1]) * 3600 * 1000;
+    } else if (vorMin) {
+      pubDateMs = now - Number(vorMin[1]) * 60 * 1000;
+    }
+
+    items.push({
+      title,
+      link,
+      source: 'Salzburg24',
+      pubDateMs,
+      summary,
+      imageUrl,
+    });
   }
   return items;
 }
@@ -490,13 +563,21 @@ router.get('/news', async (req, res) => {
   const gnewsUrl = (query: string) =>
     `https://news.google.com/rss/search?q=${encodeURIComponent(`${query} when:1d`)}&hl=${cfg.hl}&gl=${cfg.gl}&ceid=${cfg.ceid}`;
 
-  const feeds: { name: string; url: string; weight: number; tagRegion: string; isPrimaryFeed: boolean }[] = [
+  const feeds: {
+    name: string;
+    url: string;
+    weight: number;
+    tagRegion: string;
+    isPrimaryFeed: boolean;
+    kind: 'rss' | 'salzburg24';
+  }[] = [
     {
       name: 'Google News',
       url: gnewsUrl(effectivePrimary),
       weight: 3.4,
       tagRegion: effectivePrimary,
       isPrimaryFeed: true,
+      kind: 'rss',
     },
   ];
 
@@ -507,10 +588,11 @@ router.get('/news', async (req, res) => {
       weight: 2.3,
       tagRegion: effectiveSecondary,
       isPrimaryFeed: false,
+      kind: 'rss',
     });
   }
 
-  // Enrich with official Austrian ORF federal state RSS feed when user picks an Austrian region
+  // Enrich with official Austrian ORF federal state RSS feed + Salzburg24.at (with teaser images) when user picks an Austrian region
   if (country === 'AT') {
     const combined = `${effectivePrimary} ${effectiveSecondary}`;
     const orf = AUSTRIA_ORF_FEEDS.find((o) => o.match.test(combined));
@@ -521,6 +603,27 @@ router.get('/news', async (req, res) => {
         weight: 2.8,
         tagRegion: effectiveSecondary || effectivePrimary,
         isPrimaryFeed: !effectiveSecondary,
+        kind: 'rss',
+      });
+    }
+    if (/(hallein|tennengau)/i.test(combined)) {
+      feeds.push({
+        name: 'Salzburg24',
+        url: 'https://www.salzburg24.at/news/salzburg/tennengau',
+        weight: 3.5,
+        tagRegion: effectivePrimary,
+        isPrimaryFeed: true,
+        kind: 'salzburg24',
+      });
+    }
+    if (/salzburg/i.test(combined)) {
+      feeds.push({
+        name: 'Salzburg24',
+        url: 'https://www.salzburg24.at/news/salzburg',
+        weight: 2.9,
+        tagRegion: effectiveSecondary || effectivePrimary,
+        isPrimaryFeed: !effectiveSecondary,
+        kind: 'salzburg24',
       });
     }
   }
@@ -528,7 +631,9 @@ router.get('/news', async (req, res) => {
   const results = await Promise.allSettled(
     feeds.map(async (f) => {
       const { text } = await fetchTextWithTimeout(f.url, 8000);
-      return { meta: f, items: parseRssItems(text, f.name) };
+      const parsed =
+        f.kind === 'salzburg24' ? parseSalzburg24Articles(text).slice(0, 15) : parseRssItems(text, f.name);
+      return { meta: f, items: parsed };
     }),
   );
 
@@ -571,6 +676,7 @@ router.get('/news', async (req, res) => {
         region: isPrimaryRegion ? effectivePrimary : effectiveSecondary || effectivePrimary,
         isPrimaryRegion,
         summary: item.summary,
+        imageUrl: item.imageUrl,
         score,
       });
     }

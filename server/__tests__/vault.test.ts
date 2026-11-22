@@ -6,7 +6,7 @@ import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
 import * as zip from '@zip.js/zip.js';
 import { resolveSafeFolderImage, scanImageFolder } from '../routes/settings.ts';
-import { detectStoreFromUrl, extractPublicProductMetadata, parseRssItems } from '../routes/feeds.ts';
+import { detectStoreFromUrl, extractPublicProductMetadata, parseRssItems, parseSalzburg24Articles } from '../routes/feeds.ts';
 import {
   createEncryptedBackup,
   decryptBuffer,
@@ -267,5 +267,17 @@ test('RSS news parser and product metadata extractor handle Austrian feeds and J
 
   const captchaHtml = '<html><body>Enter the characters you see below - Robot Check</body></html>';
   assert.equal(extractPublicProductMetadata(captchaHtml, 'https://www.amazon.de/dp/X').blocked, true);
+
+  const s24Html = `<article class="teaser">
+    <figure class="teaser-image"><picture><img src="/storage/image/1/2/hallein.jpg" alt=""></picture>
+    <div class="badge time top"> 21.11.2026 </div></figure>
+    <div class="teaser-content"><div class="dachzeile"><span class="text">Tennengau</span></div>
+    <h3 class="headline"><a href="/news/salzburg/tennengau/test-art-123">Hallein Test Schlagzeile</a></h3></div>
+  </article>`;
+  const s24 = parseSalzburg24Articles(s24Html);
+  assert.equal(s24.length, 1);
+  assert.equal(s24[0].title, 'Hallein Test Schlagzeile');
+  assert.equal(s24[0].link, 'https://www.salzburg24.at/news/salzburg/tennengau/test-art-123');
+  assert.equal(s24[0].imageUrl, 'https://www.salzburg24.at/storage/image/1/2/hallein.jpg');
 });
 
