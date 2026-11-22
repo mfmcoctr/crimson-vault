@@ -246,6 +246,26 @@ export interface LocalNewsSnapshot {
   last24hCount: number;
 }
 
+export interface WeatherDailyForecast {
+  date: string;
+  weatherCode: number;
+  tempMax: number;
+  tempMin: number;
+  precipProb: number;
+}
+
+export interface WeatherSnapshot {
+  updatedAt: string;
+  cityLabel: string;
+  temperature: number;
+  apparentTemperature: number;
+  humidity: number;
+  windSpeed: number;
+  weatherCode: number;
+  isDay: boolean;
+  daily: WeatherDailyForecast[];
+}
+
 export type AppLanguage = 'tr' | 'en' | 'de';
 export type BackgroundMode = 'default' | 'custom' | 'folder';
 export type BackgroundFit = 'cover' | 'contain';

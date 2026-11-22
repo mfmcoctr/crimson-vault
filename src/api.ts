@@ -16,6 +16,7 @@ import type {
   StoreName,
   SubscriptionEntry,
   TrackedProduct,
+  WeatherSnapshot,
 } from './types';
 
 export class ApiError extends Error {
@@ -260,6 +261,13 @@ export const api = {
   getMarkets: (city?: string, refresh = false) =>
     request<MarketsSnapshot>(
       `/api/feeds/markets?${new URLSearchParams({
+        ...(city ? { city } : {}),
+        ...(refresh ? { refresh: '1' } : {}),
+      }).toString()}`,
+    ),
+  getWeather: (city?: string, refresh = false) =>
+    request<WeatherSnapshot>(
+      `/api/feeds/weather?${new URLSearchParams({
         ...(city ? { city } : {}),
         ...(refresh ? { refresh: '1' } : {}),
       }).toString()}`,

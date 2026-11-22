@@ -17,6 +17,7 @@ import type {
   NewsCountryCode,
   StoreName,
   TrackedProduct,
+  WeatherSnapshot,
 } from '../../src/types.ts';
 
 const router = Router();
@@ -114,6 +115,7 @@ const AUSTRIA_ORF_FEEDS: { match: RegExp; url: string; source: string }[] = [
 // Simple in-memory caches
 const marketsCache = new Map<string, { at: number; data: MarketsSnapshot }>();
 const newsCache = new Map<string, { at: number; data: LocalNewsSnapshot }>();
+const weatherCache = new Map<string, { at: number; data: WeatherSnapshot }>();
 const geocodeCache = new Map<string, { label: string; lat: number; lon: number }>();
 
 async function fetchJsonWithTimeout<T>(url: string, timeoutMs = 8000): Promise<T> {
@@ -387,6 +389,92 @@ router.get('/markets', async (req, res) => {
 
   marketsCache.set(cacheKey, { at: Date.now(), data: snapshot });
   res.json(snapshot);
+});
+
+// --- 1B. LIVE WEATHER (OPEN-METEO FOR ANY CITY) ---
+async function resolveWeatherCoords(rawCity: string): Promise<{ key: string; label: string; lat: number; lon: number }> {
+  const key = (rawCity || 'hallein').trim().toLowerCase();
+  if (FUEL_LOCATIONS[key]) {
+    return { key, label: FUEL_LOCATIONS[key].label.split(' ')[0], lat: FUEL_LOCATIONS[key].lat, lon: FUEL_LOCATIONS[key].lon };
+  }
+  const wKey = `w:${key}`;
+  const cached = geocodeCache.get(wKey);
+  if (cached) return { key, ...cached };
+  try {
+    const geo = await fetchJsonWithTimeout<{ lat: string; lon: string }[]>(
+      `https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(rawCity.trim())}`,
+      5000,
+    );
+    if (geo?.[0]) {
+      const entry = { label: rawCity.trim(), lat: Number(geo[0].lat), lon: Number(geo[0].lon) };
+      geocodeCache.set(wKey, entry);
+      return { key, ...entry };
+    }
+  } catch {
+    // fallback to Hallein
+  }
+  return { key: 'hallein', label: 'Hallein', lat: 47.6833, lon: 13.1 };
+}
+
+router.get('/weather', async (req, res) => {
+  const settings = getSettings(getActiveDek());
+  const cityRaw =
+    typeof req.query.city === 'string' && req.query.city.trim()
+      ? req.query.city.trim()
+      : settings.newsRegionPrimary || settings.fuelCity || 'Hallein';
+  const forceRefresh = req.query.refresh === '1';
+
+  const loc = await resolveWeatherCoords(cityRaw);
+  const cached = weatherCache.get(loc.key);
+  if (!forceRefresh && cached && Date.now() - cached.at < 15 * 60 * 1000) {
+    res.json(cached.data);
+    return;
+  }
+
+  try {
+    const url = `https://api.open-meteo.com/v1/forecast?latitude=${loc.lat}&longitude=${loc.lon}&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,relative_humidity_2m,is_day&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max&timezone=auto&forecast_days=4`;
+    const raw = await fetchJsonWithTimeout<{
+      current?: {
+        temperature_2m?: number;
+        apparent_temperature?: number;
+        relative_humidity_2m?: number;
+        wind_speed_10m?: number;
+        weather_code?: number;
+        is_day?: number;
+      };
+      daily?: {
+        time?: string[];
+        weather_code?: number[];
+        temperature_2m_max?: number[];
+        temperature_2m_min?: number[];
+        precipitation_probability_max?: number[];
+      };
+    }>(url, 7000);
+
+    const daily: WeatherSnapshot['daily'] = (raw.daily?.time || []).map((d, i) => ({
+      date: d,
+      weatherCode: raw.daily?.weather_code?.[i] ?? 0,
+      tempMax: Math.round(raw.daily?.temperature_2m_max?.[i] ?? 0),
+      tempMin: Math.round(raw.daily?.temperature_2m_min?.[i] ?? 0),
+      precipProb: Math.round(raw.daily?.precipitation_probability_max?.[i] ?? 0),
+    }));
+
+    const snapshot: WeatherSnapshot = {
+      updatedAt: new Date().toISOString(),
+      cityLabel: loc.label,
+      temperature: Number((raw.current?.temperature_2m ?? 0).toFixed(1)),
+      apparentTemperature: Number((raw.current?.apparent_temperature ?? 0).toFixed(1)),
+      humidity: Math.round(raw.current?.relative_humidity_2m ?? 0),
+      windSpeed: Math.round(raw.current?.wind_speed_10m ?? 0),
+      weatherCode: raw.current?.weather_code ?? 0,
+      isDay: raw.current?.is_day !== 0,
+      daily,
+    };
+    weatherCache.set(loc.key, { at: Date.now(), data: snapshot });
+    res.json(snapshot);
+  } catch (err) {
+    res.status(502).json({ error: err instanceof Error ? err.message : 'Hava durumu alınamadı.' });
+  }
 });
 
 // --- 2. DYNAMIC REGIONAL TOP 10 NEWS (LAST 24H) ---
