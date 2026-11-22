@@ -21,11 +21,9 @@ import {
   Pin,
   ShieldCheck,
   ShoppingBag,
-  Sparkles,
   StickyNote,
   Sun,
   TrendingUp,
-  Upload,
   Wind,
 } from 'lucide-react';
 import { api } from '../api';
@@ -185,25 +183,6 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
   return (
     <div className="space-y-6">
-      {/* Compact Hero Bar */}
-      <div className="pv-glass-crimson rounded-2xl p-5 sm:p-6 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <div className="text-[11px] uppercase tracking-[0.2em] text-rose-200/80 font-medium">{t('dash.badge')}</div>
-          <h1 className="font-display text-2xl sm:text-3xl font-semibold text-white mt-1">{t('dash.welcome')}</h1>
-          <p className="text-sm text-[#E4D5DA] mt-1">{t('dash.welcomeSub')}</p>
-        </div>
-        <div className="flex flex-wrap gap-2.5 shrink-0">
-          <button onClick={() => onNavigate('clients')} className="pv-btn-primary">
-            <Upload className="w-4 h-4" />
-            {t('dash.uploadClientZip')}
-          </button>
-          <button onClick={onOpenGenerator} className="pv-btn-secondary">
-            <Sparkles className="w-4 h-4 text-rose-300" />
-            {t('dash.generatePass')}
-          </button>
-        </div>
-      </div>
-
       {/* ROW 1: DAILY BRIEFING (HAVA DURUMU + BENZİN FİYATLARI + KRİPTO/ALTIN) */}
       <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
         {/* 1. LIVE WEATHER CARD */}
