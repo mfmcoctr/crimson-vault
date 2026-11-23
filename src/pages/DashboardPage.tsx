@@ -135,9 +135,9 @@ export const DashboardPage: React.FC<DashboardPageProps> = ({
 
   useEffect(() => {
     api.getMarkets(settings.fuelCity || 'hallein', false).then(setMarkets).catch(() => {});
-    api.getLocalNews(false).then(setNews).catch(() => {});
+    api.getLocalNews(false, { lang }).then(setNews).catch(() => {});
     api.getWeather(weatherCity, false).then(setWeather).catch(() => {});
-  }, [settings.fuelCity, weatherCity, settings.newsCountry, settings.newsRegionSecondary]);
+  }, [settings.fuelCity, weatherCity, settings.newsCountry, settings.newsRegionSecondary, lang]);
 
   const audit = auditPasswords(passwords);
   const subSummary = summarizeSubscriptions(subscriptions, settings.defaultCurrency, settings.exchangeRates);

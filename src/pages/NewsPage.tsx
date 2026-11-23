@@ -66,7 +66,7 @@ export const NewsPage: React.FC<NewsPageProps> = ({ settings, onUpdateSettings }
     if (force) setRefreshing(true);
     else setLoading(true);
     try {
-      const snap = await api.getLocalNews(force, override);
+      const snap = await api.getLocalNews(force, { ...override, lang });
       setData(snap);
       setRegionFilter('all');
     } catch (err) {
@@ -79,7 +79,7 @@ export const NewsPage: React.FC<NewsPageProps> = ({ settings, onUpdateSettings }
 
   useEffect(() => {
     loadNews(false);
-  }, [settings.newsCountry, settings.newsRegionPrimary, settings.newsRegionSecondary]);
+  }, [settings.newsCountry, settings.newsRegionPrimary, settings.newsRegionSecondary, lang]);
 
   const handleSaveRegion = async (e?: React.FormEvent) => {
     e?.preventDefault();

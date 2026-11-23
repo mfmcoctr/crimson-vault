@@ -116,7 +116,29 @@ const AUSTRIA_ORF_FEEDS: { match: RegExp; url: string; source: string }[] = [
 const marketsCache = new Map<string, { at: number; data: MarketsSnapshot }>();
 const newsCache = new Map<string, { at: number; data: LocalNewsSnapshot }>();
 const weatherCache = new Map<string, { at: number; data: WeatherSnapshot }>();
+const translationCache = new Map<string, string>();
 const geocodeCache = new Map<string, { label: string; lat: number; lon: number }>();
+
+async function translateText(text: string, sourceLang: string, targetLang: string): Promise<string> {
+  const clean = text.trim();
+  if (!clean || sourceLang === targetLang) return clean;
+  const key = `${sourceLang}->${targetLang}:${clean}`;
+  const cached = translationCache.get(key);
+  if (cached) return cached;
+  try {
+    const url = `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${encodeURIComponent(sourceLang)}&tl=${encodeURIComponent(targetLang)}&dt=t&q=${encodeURIComponent(clean)}`;
+    const data = await fetchJsonWithTimeout<[[string, string][]?]>(url, 4000);
+    const translated = Array.isArray(data?.[0]) ? data[0].map((seg) => seg[0] || '').join('').trim() : '';
+    if (translated) {
+      if (translationCache.size > 500) translationCache.clear();
+      translationCache.set(key, translated);
+      return translated;
+    }
+  } catch {
+    // fallback to original text
+  }
+  return clean;
+}
 
 async function fetchJsonWithTimeout<T>(url: string, timeoutMs = 8000): Promise<T> {
   const res = await fetch(url, {
@@ -639,8 +661,10 @@ router.get('/news', async (req, res) => {
   const effectiveSecondary = regionPrimary && regionSecondary && regionPrimary.toLowerCase() !== regionSecondary.toLowerCase()
     ? regionSecondary
     : '';
+  const rawLang = String(req.query.lang || '').toLowerCase();
+  const targetLang = ['tr', 'en', 'de'].includes(rawLang) ? rawLang : '';
 
-  const cacheKey = `${country}|${effectivePrimary.toLowerCase()}|${effectiveSecondary.toLowerCase()}`;
+  const cacheKey = `${country}|${effectivePrimary.toLowerCase()}|${effectiveSecondary.toLowerCase()}|${targetLang}`;
   const cached = newsCache.get(cacheKey);
   if (!forceRefresh && cached && Date.now() - cached.at < 10 * 60 * 1000) {
     res.json(cached.data);
@@ -786,13 +810,32 @@ router.get('/news', async (req, res) => {
   }
 
   const last24hCount = scored.filter((x) => x.ageHours <= 24).length;
+  let finalItems = selected.map(({ score: _s, ...item }) => item);
+
+  // Auto-translate headlines & summaries when UI language differs from feed language
+  if (targetLang && targetLang !== cfg.lang && finalItems.length > 0) {
+    finalItems = await Promise.all(
+      finalItems.map(async (item) => {
+        const [trTitle, trSummary] = await Promise.all([
+          translateText(item.title, cfg.lang, targetLang),
+          item.summary ? translateText(item.summary, cfg.lang, targetLang) : Promise.resolve(''),
+        ]);
+        return {
+          ...item,
+          title: trTitle,
+          summary: trSummary,
+        };
+      }),
+    );
+  }
+
   const snapshot: LocalNewsSnapshot = {
     updatedAt: new Date().toISOString(),
     country,
     language: cfg.lang,
     regionPrimary: effectivePrimary,
     regionSecondary: effectiveSecondary,
-    items: selected.map(({ score: _s, ...item }) => item),
+    items: finalItems,
     last24hCount,
   };
   newsCache.set(cacheKey, { at: Date.now(), data: snapshot });

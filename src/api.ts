@@ -281,13 +281,14 @@ export const api = {
         ...(refresh ? { refresh: '1' } : {}),
       }).toString()}`,
     ),
-  getLocalNews: (refresh = false, override?: { country?: string; primary?: string; secondary?: string }) =>
+  getLocalNews: (refresh = false, override?: { country?: string; primary?: string; secondary?: string; lang?: string }) =>
     request<LocalNewsSnapshot>(
       `/api/feeds/news?${new URLSearchParams({
         ...(refresh ? { refresh: '1' } : {}),
         ...(override?.country ? { country: override.country } : {}),
         ...(override?.primary !== undefined ? { primary: override.primary } : {}),
         ...(override?.secondary !== undefined ? { secondary: override.secondary } : {}),
+        ...(override?.lang ? { lang: override.lang } : {}),
       }).toString()}`,
     ),
   getDeals: () => request<TrackedProduct[]>('/api/feeds/deals'),
